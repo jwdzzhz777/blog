@@ -48,12 +48,12 @@
 ```
 > note：`package.json` 是需要的，在这里主要用来声明插件
 > ```
-"eggPlugin": {
-    "name": "genome",
-    "dependencies": [
-        "nunjucks"
-    ]
-}
+>"eggPlugin": {
+>    "name": "genome",
+>    "dependencies": [
+>        "nunjucks"
+>    ]
+>}
 > ```
 
 因为还在项目中所以不需要 `tsconfig.json` 以及 `package.json` 的其他配置。
@@ -70,7 +70,7 @@ declare module 'egg' {
     }
 }
 ```
-接下来像正常的插件一样使用就可以了，在 `plugin.ts` 中通 `path` 来挂载插件：
+接下来像正常的插件一样使用就可以了，在 `plugin.ts` 中通过 `path` 来挂载插件：
 ```ts
 nunjucks: {
     enable: true,
