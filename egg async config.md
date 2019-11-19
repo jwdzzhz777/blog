@@ -67,7 +67,7 @@ module.exports = app => {
 ![life_circle][life_circle_url]
 
 看了一下 `eggjs` 启动的生命周期，
-￼官方文档讲的很清楚了，是个配置生效前的异步钩子，那么不用管 `loadDatabase` 里面干了啥，直接在 `beforeStart`
+官方文档讲的很清楚了，是个配置生效前的异步钩子，那么不用管 `loadDatabase` 里面干了啥，直接在 `beforeStart`
 钩子函数里做文章就好了。
 
 于是：
