@@ -140,7 +140,7 @@ curl('https://api.github.com/graphql', {
 ```
 > note: `object expression 'master:.gitignore'` 指向了 .gitignore 文件
 
-<img src="https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/github_api_v4/1574242351509.jpg" height="48" >
+<img src="https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/github_api_v4/1574242351509.jpg" height="64" >
 
 
 ### 获取提交信息
