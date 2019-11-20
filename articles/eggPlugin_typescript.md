@@ -190,6 +190,6 @@ ok, 成功。
 总结一下：其实过程中并没有遇到什么很大的问题，都是一些小细节(也有可能是我忘了)，写这个的目的也是鼓励自己多做尝试，多写一些有意思的东西，并在一开始就做好单独抽出来的准备，进行[渐进式开发][egg-url]。毕竟结果不重要，但过程很享受。
 
 [egg-url]:https://eggjs.org/zh-cn/tutorials/progressive.html
-[success_url]:https://cvws.icloud-content.com/B/AfLrlZkkbHBsgIYBqUTqSaFGqayZAa3imDgQTt98xo7_ipgtJ1CCo2zM/1574058545720.jpg?o=AhVJcy0E71YTpKD_CDO6TjHr0aN16uC0r5JSmtDR6Znr&v=1&x=3&a=CAogzs1irz-Vt5VlGVcpp1mctT8wo7wLUrNFza2hA0VlMlISHRCs0bny5y0YzMjw8uctIgEAUgRGqayZWgSCo2zM&e=1574077998&k=Q78IGZbo7oJkQd91SqS1Gg&fl=&r=43660daa-035d-4380-8673-063383d43900-1&ckc=com.apple.clouddocs&ckz=com.apple.CloudDocs&p=25&s=Wyi_aNXLVMBxezVKQ8Nollvm36M&cd=i
-[error_url]:https://cvws.icloud-content.com/B/AWpt8OSBrfQY4DIwsKISlzSLB76RAbwIFd701ksC5c6XMkM96NXIK7Tz/1574061095736.jpg?o=AoulR7ykUfCgvnQsTz1zrg8coPm1HQQe-Vgn2tunVDsC&v=1&x=3&a=CAog3MeD5-7oHrS8eHBrNk0-BWTkTZCeQ5Pbatyi5NlDzN4SHRCfnOvq5y0Yv5Oi6-ctIgEAUgSLB76RWgTIK7Tz&e=1574062033&k=8R9JPYvwGWPlOuGlkN93EA&fl=&r=7dd2ec8c-104d-47b4-9a16-2b5dfdd9aba2-1&ckc=com.apple.clouddocs&ckz=com.apple.CloudDocs&p=25&s=54AMPPUNZ8thjfrtEzr-UIbpl2U&cd=i
+[success_url]:https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/eggPlugin_typescript/1574058545720.jpg
+[error_url]:https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/eggPlugin_typescript/1574061095736.jpg
 [github_url]:https://github.com/jwdzzhz777/genome

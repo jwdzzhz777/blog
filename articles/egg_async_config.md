@@ -174,5 +174,5 @@ export default AppBootHook;
 `willReady` 运行在插件加载之前，所以我们获取配置放在这里， `didLoad` 运行在插件加载好之后，我们可以对加载好的插件进行造作
 `this.app.xxx = ...`
 
-[life_circle_url]:https://cvws.icloud-content.com/B/AUeC756XkRNjWzHzs06S26pWuo1aAcbe87Hf9W083BySY-fy8r7mJn1R/WechatIMG4.jpeg?o=AmeFfeZIrzl0JrEMC8kDTQu67fzH1Yvk9q-n_L88VTyp&v=1&x=3&a=CAog_LddCDEzkRCbnyka2uMMbSQSuvpI_Q_O80J_Dl5S8tkSHRDHuPeX6C0Y56-umOgtIgEAUgRWuo1aWgTmJn1R&e=1574156605&k=-esoHxbIuDqGs2WFWLeO_w&fl=&r=04fb5f42-6f7d-4cd5-9ab8-4812042424ae-1&ckc=com.apple.clouddocs&ckz=com.apple.CloudDocs&p=25&s=QAeP1i1ajj9vlK0aZNJRS6gW8c0&cd=i
+[life_circle_url]:https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/egg_async_config/WechatIMG4.jpeg
 [update_life_circle]:https://eggjs.org/zh-cn/advanced/loaderUpdate.html#mobileAside
