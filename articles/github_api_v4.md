@@ -181,14 +181,14 @@ variables: {
 [blog_post]:https://github.blog/2016-09-14-the-github-graphql-api/
 [developer_github_v4]:https://developer.github.com/v4/
 [personal_access_token]:https://help.github.com/en/github/authenticating-to-github/creating-a-personal-access-token-for-the-command-line
-[result_user]: xxx
+[result_user]: https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/github_api_v4/1574239379939.jpg
 [viewer_url]:https://developer.github.com/v4/object/user/
 [repository_url]:https://developer.github.com/v4/object/repository/
 [object_url]:https://developer.github.com/v4/interface/gitobject/
 [tree_url]:https://developer.github.com/v4/object/tree/
-[result_file_list]: xxx
+[result_file_list]: https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/github_api_v4/1574241878332.jpg
 [blob_url]:https://developer.github.com/v4/object/blob/
-[result_file_blob]: xxx
+[result_file_blob]: https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/github_api_v4/1574242351509.jpg
 [ref_url]: https://developer.github.com/v4/object/ref/
 [commit_url]: https://developer.github.com/v4/object/commit/
-[result_commit]: xxx
+[result_commit]: https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/github_api_v4/1574243101776.jpg
