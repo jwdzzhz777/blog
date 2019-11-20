@@ -112,7 +112,7 @@ curl('https://api.github.com/graphql', {
 > note: `$name_of_repository` 是 repository 的名字，`expression` 是一个表达式 `'xx：xx'` 前面是分支，后面是路径。
 > 这里 'master:' 代表root
 
-![返回结果][result_file_list]
+<img src="https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/github_api_v4/1574241878332.jpg" width="256" >
 
 ### 获取单个文件数据
 
@@ -140,7 +140,8 @@ curl('https://api.github.com/graphql', {
 ```
 > note: `object expression 'master:.gitignore'` 指向了 .gitignore 文件
 
-![返回结果][result_file_blob]
+<img src="https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/github_api_v4/1574242351509.jpg" height="48" >
+
 
 ### 获取提交信息
 
@@ -176,7 +177,7 @@ variables: {
 > note: `ref` :repository 的 引用，`qualifiedName: 'master'` 代表 master 分子的引用
 > `history path` 路径，非必填，不填写则返回 该分支所有的 commit list ,否则返回和路径匹配的对象的 commit list
 
-![返回结果][result_commit]
+<img src="https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/github_api_v4/1574243101776.jpg" width="256" >
 
 [blog_post]:https://github.blog/2016-09-14-the-github-graphql-api/
 [developer_github_v4]:https://developer.github.com/v4/
