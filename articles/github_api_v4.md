@@ -237,7 +237,7 @@ variables: {
     }
 }
 ```
-结果：<img src="https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/github_api_v4/1574337333984.jpg" height="148">
+结果：<img src="https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/github_api_v4/1574337333984.jpg" width="286">
 
 两种方法其实差不多,从这里可以看出 graphql 真的很灵活！
 
