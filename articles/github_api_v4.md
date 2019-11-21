@@ -179,17 +179,79 @@ variables: {
 
 <img src="https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/github_api_v4/1574243101776.jpg" width="256" >
 
+### 获取所有 带有某个 label 的 Issue
+
+关键字： [`label`][label_url] 、 [`Issue`][issue_url]。
+两种方法。
+
+第一种，直接查找某 label 有关的 issue
+
+```js
+{
+    query: `
+        query($name_of_repository: String!) {
+            viewer {
+                repository (name: $name_of_repository) {
+                    issues (labels: ["article"], first: 10) {
+                        nodes {
+                            title
+                        }
+                    }
+                }
+            }
+        }
+    `,
+    variables: {
+        'name_of_repository': 'xxx',
+    }
+}
+```
+
+> note: labels 参数接收一个数组
+
+第二种，先找 label 再找到该 label 有关的所有 issue
+
+```js
+{
+    query: `
+        query($name_of_repository: String!) {
+            viewer {
+                repository (name: $name_of_repository) {
+                    labels (first: 10, query: "article") {
+                        nodes {
+                            issues (first: 10) {
+                                nodes {
+                                    title
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    `,
+    variables: {
+        'name_of_repository': 'xxx'
+    }
+}
+```
+两种方法差不多, 可以看出 graphql 真的很灵活。
+
 [blog_post]:https://github.blog/2016-09-14-the-github-graphql-api/
 [developer_github_v4]:https://developer.github.com/v4/
 [personal_access_token]:https://help.github.com/en/github/authenticating-to-github/creating-a-personal-access-token-for-the-command-line
-[result_user]: https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/github_api_v4/1574239379939.jpg
+
 [viewer_url]:https://developer.github.com/v4/object/user/
 [repository_url]:https://developer.github.com/v4/object/repository/
 [object_url]:https://developer.github.com/v4/interface/gitobject/
 [tree_url]:https://developer.github.com/v4/object/tree/
-[result_file_list]: https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/github_api_v4/1574241878332.jpg
 [blob_url]:https://developer.github.com/v4/object/blob/
-[result_file_blob]: https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/github_api_v4/1574242351509.jpg
 [ref_url]: https://developer.github.com/v4/object/ref/
 [commit_url]: https://developer.github.com/v4/object/commit/
+[issue_url]: https://developer.github.com/v4/object/issue/
+[label_url]: https://developer.github.com/v4/object/labelconnection/
+
+[result_user]: https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/github_api_v4/1574239379939.jpg
+[result_file_list]: https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/github_api_v4/1574241878332.jpg
+[result_file_blob]: https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/github_api_v4/1574242351509.jpg
 [result_commit]: https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/github_api_v4/1574243101776.jpg
