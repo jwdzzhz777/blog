@@ -177,7 +177,7 @@ variables: {
 > note: `ref` :repository 的 引用，`qualifiedName: 'master'` 代表 master 分子的引用
 > `history path` 路径，非必填，不填写则返回 该分支所有的 commit list ,否则返回和路径匹配的对象的 commit list
 
-<img src="https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/github_api_v4/1574243101776.jpg" width="256" >
+结果：<img src="https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/github_api_v4/1574243101776.jpg" width="256">
 
 ### 获取所有 带有某个 label 的 Issue
 
@@ -209,6 +209,8 @@ variables: {
 
 > note: labels 参数接收一个数组
 
+结果：<img src="https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/github_api_v4/1574337041329.jpg" height="148">
+
 第二种，先找 label 再找到该 label 有关的所有 issue
 
 ```js
@@ -235,7 +237,9 @@ variables: {
     }
 }
 ```
-两种方法差不多, 可以看出 graphql 真的很灵活。
+结果：<img src="https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/github_api_v4/1574337333984.jpg" height="148">
+
+两种方法其实差不多,从这里可以看出 graphql 真的很灵活！
 
 [blog_post]:https://github.blog/2016-09-14-the-github-graphql-api/
 [developer_github_v4]:https://developer.github.com/v4/
@@ -254,4 +258,6 @@ variables: {
 [result_user]: https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/github_api_v4/1574239379939.jpg
 [result_file_list]: https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/github_api_v4/1574241878332.jpg
 [result_file_blob]: https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/github_api_v4/1574242351509.jpg
-[result_commit]: https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/github_api_v4/1574243101776.jpg
+[result_commit]: https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/github_api_v4/1574243101776.
+[reault_issue]: https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/github_api_v4/1574337041329.jpg
+[result_label]: https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/github_api_v4/1574337333984.jpg
