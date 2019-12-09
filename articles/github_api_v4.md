@@ -241,6 +241,10 @@ variables: {
 
 两种方法其实差不多,从这里可以看出 graphql 真的很灵活！
 
+****
+
+## 未完待续
+
 [blog_post]:https://github.blog/2016-09-14-the-github-graphql-api/
 [developer_github_v4]:https://developer.github.com/v4/
 [personal_access_token]:https://help.github.com/en/github/authenticating-to-github/creating-a-personal-access-token-for-the-command-line
