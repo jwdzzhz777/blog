@@ -245,7 +245,59 @@ export default class MyApp extends App {
 即会自动把没有阻塞数据要求的页面优化为静态页面，它是根据 `getInitialProps` 方法判断的。
 
 这样每个页面的 props 里都能拿到 data 了。同样的我也可以把请求错误的 error 传到 layout 中做一些处理，这样即便我在服务端调的接口报错了，我也能在页面上提示出来。
+```ts
+import App from 'next/app';
+import Layout from 'components/layout';
 
+export default class MyApp extends App {
+    static async getInitialProps({ Component, ctx }) {
+        const pageProps = await Component.getInitialProps(ctx);
+        try {
+            let data = await curl(...);
+            return { pageProps: {...pageProps, data} };
+        } catch (error) {
+            return { pageProps, error: error.message };
+        }
+    }
+    render() {
+        const { Component, pageProps, error } = this.props as any;
+        return (
+            <Layout error={error} data={pageProps.data}>
+                <Component {...pageProps} />
+            </Layout>
+        );
+    }
+}
+```
+```ts
+// in components/layout.tsx
+import React from 'react';
+import Head from 'next/head'
+import Header from './header';
+
+export default class Layout extends React.Component {
+    render() {
+        const { children, error } = this.props;
+        const { snakeBar } = this.state;
+
+        if (error) {
+            // do something in this
+        }
+
+        return (
+            <>
+                <Head>
+                    <meta name="viewport" content="initial-scale=1.0, width=device-width" key="viewport" />
+                </Head>
+                <Header/>
+                {children}
+            </>
+        )
+    }
+}
+```
+
+### 未完待续
 [quick_start]:https://nextjs.org/learn/basics/getting-started/setup
 [next-less]:https://github.com/zeit/next-plugins/tree/master/packages/next-less
 [static-optimization]:https://nextjs.org/docs#automatic-static-optimization
