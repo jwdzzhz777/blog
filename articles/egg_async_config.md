@@ -177,5 +177,5 @@ export default AppBootHook;
 `willReady` 运行在插件加载之前，所以我们获取配置放在这里， `didLoad` 运行在插件加载好之后，我们可以对加载好的插件进行造作
 `this.app.xxx = ...`
 
-[life_circle_url]:https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/egg_async_config/WechatIMG4.jpeg
+[life_circle_url]:https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/egg_async_config/WechatIMG4.jpg
 [update_life_circle]:https://eggjs.org/zh-cn/advanced/loaderUpdate.html#mobileAside
