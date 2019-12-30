@@ -441,6 +441,6 @@ ok，现在访问就快多了。
 
 [chunk_img]:https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/nextJs/1577435701641.jpg
 [first_optimize]:https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/nextJs/1577440273496.jpg
-[first_optimize_done]:https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/nextJs/[first_optimize_done]:https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/nextJs/1577440273496.jpg.jpg
-[second_optimize]:https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/nextJs/[first_optimize_done]:https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/nextJs/1577689958466.jpg.jpg
-[second_optimize_done]:https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/nextJs/[first_optimize_done]:https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/nextJs/1577694466593.jpg.jpg
+[first_optimize_done]:https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/nextJs/[first_optimize_done]:https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/nextJs/1577440273496.jpg
+[second_optimize]:https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/nextJs/[first_optimize_done]:https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/nextJs/1577689958466.jpg
+[second_optimize_done]:https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/nextJs/[first_optimize_done]:https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/nextJs/1577694466593.jpg
