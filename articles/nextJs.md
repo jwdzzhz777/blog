@@ -132,12 +132,21 @@ module.exports = withLess({
 ```
 import "./styles.less";
 ```
-或者这么用
+要注意的是这样引入是全局的，要做好命名空间的约定，每个文件用类名包裹。
+也可以用 `css modules`：
+```js
+// next.config.js
+const withLess = require('@zeit/next-less')
+module.exports = withLess({
+  cssModules: true
+})
+```
 ```js
 mport css from "../styles.less"
 
 export default () => <div className={css.example}>Hello World!</div>
 ```
+不过说实话这样真不好用，个人感觉。
 
 ### 设置公共部分
 假如页面有个公共的 `header` ，我总是希望有一个 `Layout` 里面有页面的公共部分，比如 `<header>`、`<footer>` 然后中间才是我们的页面，在 `Vue` 中我们可以用 `Router` 实现,但在Next.js中所有页面都是独立的 page。官方的教程里也是每个 page 引入一个 `<header>` 这显然不是我想要的。
@@ -217,7 +226,6 @@ export default () => {
     )
 };
 ```
-
 ### 给每个页面提供数据
 现在我有了公共的 `header` 现在我想给每个页面提供数据。我们甚至可以在 MyApp 中定义   `getInitialProps` 方法。
 ```ts
@@ -226,6 +234,8 @@ import Layout from 'components/layout';
 
 export default class MyApp extends App {
     static async getInitialProps({ Component, ctx }) {
+        /** 注意这里一定要调一把 Component.getInitialProps(ctx) 拿到 props */
+        /** 否则每个页面会拿不到 getInitialProps 的数据 */
         const pageProps = await Component.getInitialProps(ctx);
         let data = await curl(...);
         return { pageProps: {...pageProps, data} };
@@ -296,8 +306,141 @@ export default class Layout extends React.Component {
     }
 }
 ```
+> note: 提一嘴 `getInitialProps` 方法在第一次进入页面或者刷新的时候都是在服务端调用的，而路由跳转的情况是在客户端调用的。
+
+### 构建优化
+`next.js` 的构建部署就比较简单，构建运行就可以了。
+```
+npm run build
+npm run start
+```
+试着访问了下，效果并不尽人意，加载速度非常慢，一方面服务端渲染请求的速度比较慢，另一方面打包完的资源比较大，因为我引入了几个比较大的模块，再加上提取了公共部分 `_app` ,有必要优化一下。
+
+**包分析**
+
+首先安装 next 的包分析插件。
+```
+yarn add @next/bundle-analyzer
+```
+在 `next.config.js` 中编辑，配合环境变量一起使用：
+```js
+const withBundleAnalyzer = require('@next/bundle-analyzer')({
+  enabled: process.env.ANALYZE === 'true',
+})
+module.exports = withBundleAnalyzer(otherPlugins())
+```
+然后可以运行命令分析构建的大小
+```
+ANALYZE=true yarn build
+```
+完事会生成两个两个报告一个是 server 端一个是 client 端，这里主要看下 client 端，作为服务端渲染 `Next.js` 是个多页面的配置，每个 page 都会作为入口，其依赖都会被打包到单独的 chunk 中。
+
+![analyze][chunk_img]
+
+ `article.js` 太大了，其本身是展示文章的页面，需要依赖 markdown 相关的模块，其中的 `highlight.js` 占据了全部的大小。要对其优化下。
+
+首先我希望 `highlight.js` 被放在单独的 chunk 中，不和 article 页面捆绑在一起，因为我希望有时内容并不是 markdown 时他能被按需加载。
+
+现在我尝试将组件转化为动态组件，Next.js 的 [dynamic imports][dynamic] 提供了动态组件的支持:
+
+```ts
+// import Highlight from 'react-highlight';
+import dynamic from 'next/dynamic';
+const Highlight: any = dynamic(() => import('react-highlight'));
+/** react-highlight 中依赖了 highlight.js */
+```
+ok,利用 `import()` 语法webpack 能很好的分割出 `react-highlight`, 现在它也能够被按需利用了：
+
+![first_optimize][first_optimize]
+
+现在 `react-highlight` 都被分割在了 chunks/10 中，但是它还是太大了，这么大是因为 `highlight.js` 里面包含了各种语言，而我会用到的可能就其中的一小部分，即便我尝试单独 import 其中部分语言，它还是会把所有语言都打包到一块去，现在我要手动处理下：
+
+**webpack.ContextReplacementPlugin**
+
+`ContextReplacementPlugin` 的功能很简单，允许覆盖查找规则。我们把 `highlight.js` 的查找路径改为其中部分语言的路径，这样构建的时候就会根据我们覆盖的路径进行打包：
+
+```js
+//  in next.config.js
+module.exports = {
+    webpack: (config, { webpack }) => {
+        config.plugins.push(new webpack.ContextReplacementPlugin(
+            /highlight\.js\/lib\/languages$/,
+            new RegExp(`^./(${['javascript', 'typescript', 'bash', 'basic', 'json'].join('|')})$`)
+        ));
+        return config;
+    },
+}
+```
+
+这样 webpack 匹配 `highlight.js/lib/languages` 时会替换成其中几个语言 `highlight.js/lib/languages/{somelanguage}` , 大大减少了构建的大小：
+
+![first_optimize_done][first_optimize_done]
+
+ok, 它现在被压缩到非常能接受的范围了。
+
+**SplitChunksPlugin**
+
+再仔细看下报告图我还发现了一些问题,之前利用了 `_app.tsx` 提取了公共部分，然后项目又用到了 `@material-ui` ,在公共入口处引用了 `@material-ui` 的主题，这样的话每个页面都有 `@material-ui` 相关的代码，它应该在 `commons.xxx.js` 的块中，而现实是他出现在每个有引用 `@material-ui` 的地方。
+
+![second_optimize][second_optimize]
+
+去看一下 `Next.js` 默认配置：
+
+```ts
+/** in next/build/webpack-config.ts */
+const splitChunksConfigs: {
+    [propName: string]: webpack.Options.SplitChunksOptions
+  } = {
+    prod: {
+      chunks: 'all',
+      cacheGroups: {
+        default: false,
+        vendors: false,
+        commons: {
+          name: 'commons',
+          chunks: 'all',
+          minChunks: totalPages > 2 ? totalPages * 0.5 : 2,
+        },
+        react: {
+          name: 'commons',
+          chunks: 'all',
+          test: /[\\/]node_modules[\\/](react|react-dom|scheduler|use-subscription)[\\/]/,
+        },
+      },
+    }
+}
+```
+
+官方并没有对 `_app` 做特殊的配置，分包的策略只是将 `react|react-dom|scheduler|use-subscription` 放在 commons 中，然后是引用次数大于页面数量的一半的依赖放也在 commons 中。这就不太合理了，我可不想每个页面都加载 `@material-ui`，我们来手动优化下：
+
+```js
+//  in next.config.js
+module.exports = {
+    webpack: (config, { webpack }) => {
+        config.optimization.splitChunks &&
+        (
+            config.optimization.splitChunks.cacheGroups.react.test =
+            /[\\/]node_modules[\\/](react|react-dom|scheduler|use-subscription|@material-ui\/styles\/esm|@material-ui\/core\/esm\/styles)[\\/]/
+        );
+        return config;
+    },
+}
+```
+
+我手动把 `@material-ui` 中关于主题的一部分一起放到了 `commons` ,其他部分还是让他按照规则自动分配：
+
+![second_optimize_done][second_optimize_done]
+
+嗯嗯，现在访问就快多了。
 
 ### 未完待续
 [quick_start]:https://nextjs.org/learn/basics/getting-started/setup
 [next-less]:https://github.com/zeit/next-plugins/tree/master/packages/next-less
 [static-optimization]:https://nextjs.org/docs#automatic-static-optimization
+[dynamic]:https://nextjs.org/docs/#dynamic-import
+
+[chunk_img]:https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/nextJs/1577435701641.jpg
+[first_optimize]:https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/nextJs/1577440273496.jpg
+[first_optimize_done]:https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/nextJs/[first_optimize_done]:https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/nextJs/1577440273496.jpg.jpg
+[second_optimize]:https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/nextJs/[first_optimize_done]:https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/nextJs/1577689958466.jpg.jpg
+[second_optimize_done]:https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/nextJs/[first_optimize_done]:https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/nextJs/1577694466593.jpg.jpg
