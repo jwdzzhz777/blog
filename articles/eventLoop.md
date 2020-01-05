@@ -8,7 +8,10 @@ event loop是一个规范，具体看[这里](event-loop-spec)，每个浏览器
 * 每个*event loop*都有一个 *microtask queue*，是一个*microtasks*的集合，一开始是空的，*microtask* 是通过微任务算法创建的 *task*
 * 每个 *event loop* 有一个 boolean 值的 *microtask checkpoint* , 默认为 `false` , 每当到达 *microtask* 的执行点时用来判断。
 
+![eventloop][eventloop]
+
 上面是规范的原文了内容还有有很多，*microtask* 就是我们所说的**微任务**，规范中并未提及 `macrotask queue` ，根据[这个][issue]提到的 *task queue* 就是我们所说的 `macrotask queue` ，一个 *task* 就是一个 `macrotask` ，这个之后讨论。
+
 
 ## tasks & microtask
 那么什么是 *task*, 详细的看[这里][task]。
@@ -26,6 +29,8 @@ event loop是一个规范，具体看[这里](event-loop-spec)，每个浏览器
 
 3. 将 *task* 推到 *event loop* 中和 *task* 同源(*Source*)的 *task queue* 中(没有的话创建一个？)
 3. 如果这里是 *microtask* 直接推到提供的 *event loop* 的 *microtask queue* 中
+
+![newTask][newTask]
 
 > note: *microtask* 也是一个 *task* 其也有 Steps、Source、document、Script evaluation environment settings object set 这四个玩意，但 *microtask queue* 不是 *task queue*
 
@@ -50,6 +55,8 @@ event loop是一个规范，具体看[这里](event-loop-spec)，每个浏览器
 5. 此时**可能**会进行更新视图渲染
 6. 重复2-5
 7. 其他
+
+![processing][processing]
 
 类似于
 ```js
@@ -106,6 +113,8 @@ while (/** event loop exist */) {
 
 `onmouseup` 和 `onclick` 他们都来自与一次用户交互，因此他们应该在同一个 *task queue* 中，而两次 `setTimeout` 产生的 *task* 会不会在一个 *task queue* 中呢
 
+![click][click]
+
 得到的结果有一点奇怪，根据 **流程模型** ，*microtask checkpoint* 只会存在于每个 *task* 运行完之后，所以 *图中的 Task* 应该不是我们理解的 *task*，而像是我们说的 *task queue*，而 `Event:click` 和 `Event:mouseup` 更像是我们说的 *task* ，因为他们最后都执行了 `Run Micortasks`。
 
 这样理解就没有问题了，两个 `Event` 都产生自用户交互的 *Source*，所以他们在同一个 *task queue* 中，而每个 `setTimeout` 生成的 *task* 都放在了一个新的、单独的 *task queue* 中，也许他没设置成通用的 *Source*，而是新生成了一个。
@@ -133,3 +142,7 @@ while (/** event loop exist */) {
 [queuing tasks]:https://html.spec.whatwg.org/multipage/webappapis.html#queuing-tasks
 [implied event loop]:https://html.spec.whatwg.org/multipage/webappapis.html#implied-event-loop
 [tasks-microtasks-queues-and-schedules]:https://jakearchibald.com/2015/tasks-microtasks-queues-and-schedules/#comment-2198501019
+[eventloop]:https://github.com/jwdzzhz777/blog/blob/master/assets/event_loop/eventloop.jpg?raw=true
+[newTask]:https://github.com/jwdzzhz777/blog/blob/master/assets/event_loop/newTask.jpg?raw=true
+[processing]:https://github.com/jwdzzhz777/blog/blob/master/assets/event_loop/processing.jpg?raw=true
+[click]:https://github.com/jwdzzhz777/blog/blob/master/assets/event_loop/click.jpg?raw=true
