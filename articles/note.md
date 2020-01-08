@@ -179,8 +179,22 @@ export function nextTick (cb?: Function, ctx?: Object) {
 ```
 简单的说 `callbacks` 存放任务的队列， `flushCallbacks` 执行任务队列
 
-`timerFunc`
+`timerFunc` 用于把 `flushCallbacks` 放入微任务队列。
+调用 `nextTick` 把回调放入 `callbacks` 然后执行 `timerFunc`。
 
+`timerFunc` 会先做一层判断，根据环境支持依次选择以下方法
+1. Promise
+2. MutationObserver
+3. setImmediate
+4. setTimeout
+
+为什么优先选择微任务?其实不论微任务还是宏任务都有一些问题，但微任务的优点很明显，每个任务（比如触发事件）最后 vue 都会修改 dom ,我们并不需要等待页面渲染，只要 dom 更改了对我们来说就可以拿到正确的 dom ，整个过程是这样的：
+
+task => task 的最后修改 dom => run `microtask` => ui 渲染 => task(宏任务)
+
+也就是说如果 `nextTick` 是微任务，不管我们嵌套多少个 nexttick ，回调都能拿到正确的 dom 并且在渲染之前修改 dom 。也就是我们最终只会渲染一次。
+
+个人理解，具体去看 eventloop
 
 ### 3.0
 
