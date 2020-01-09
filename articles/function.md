@@ -91,7 +91,7 @@ var myFunction = function [name]([param1[, param2[, ..., paramN]]]) {
 这里 `name` 不是必须的，当你指定另一个 `name` 的时候他是一种特殊情况叫具名函数表达式(Named function expression, 以下称 NFE)。在 [ECMA 规范][ECMA] 中有一段描述：
 > The Identifier in a FunctionExpression can be referenced from inside the FunctionExpression's FunctionBody to allow the function to call itself recursively. However, unlike in a FunctionDeclaration, the Identifier in a FunctionExpression cannot be referenced from and does not affect the scope enclosing the FunctionExpression.
 
-也就是说在函数体内部可以访问到名为 `name（Identifier）` 的变量，从而允许你调用自身来实现递归，而具 NFE 不同，Identifier 不能在 函数表达式 所在的作用域（scope）中被引用，也不能影响 函数表达式 所在的作用域（scope）。
+也就是说在函数体内部可以访问到名为 `name（Identifier）` 的变量，从而允许你调用自身来实现递归，而 NFE 不同，Identifier 不能在 函数表达式 所在的作用域（scope）中被引用，也不能影响 函数表达式 所在的作用域（scope）。
 
 所以：
 
@@ -136,17 +136,17 @@ var b = 10;
 
 a();
 // step.1 f b()
-// step.2 1
+// step.2 10
 // step.3 f b()
 ```
 
 可以看到这种情况方法体内 b 是 `Identifier` 而不是全局的 b 但是为什么 `b = 20;` 这一句并没有执行呢？依旧是看 [ECMA 规范][ECMA] 中，创建一个 NFE 的步骤，它比其他情况要复杂的多：
 > 1. Let funcEnv be the result of calling NewDeclarativeEnvironment passing the running execution context’s Lexical Environment as the argument
-2. Let envRec be funcEnv’s environment record.
-3. Call the CreateImmutableBinding concrete method of envRec passing the String value of Identifier as the argument.
-4. Let closure be the result of creating a new Function object as specified in 13.2 with parameters specified by FormalParameterListopt and body specified by FunctionBody. Pass in funcEnv as the Scope. Pass in true as the Strict flag if the FunctionExpression is contained in strict code or if its FunctionBody is strict code.
-5. Call the InitializeImmutableBinding concrete method of envRec passing the String value of Identifier and closure as the arguments.
-6. Return closure.
+> 2. Let envRec be funcEnv’s environment record.
+> 3. Call the CreateImmutableBinding concrete method of envRec passing the String value of Identifier as the argument.
+> 4. Let closure be the result of creating a new Function object as specified in 13.2 with parameters specified by FormalParameterListopt and body specified by FunctionBody. Pass in funcEnv as the Scope. Pass in true as the Strict flag if the FunctionExpression is contained in strict code or if its FunctionBody is strict code.
+> 5. Call the InitializeImmutableBinding concrete method of envRec passing the String value of Identifier and closure as the arguments.
+> 6. Return closure.
 
 仔细看 step3 和 step5 的 `CreateImmutableBinding` 和 `InitializeImmutableBinding` 将 `Identifier` 作为参数传递。虽然咱不知道他是干啥的但是通过名字咱们能猜测出来，创建、初始化**不可修改**的绑定。所以 NFE 的 方法体中 `Identifier` 变量是不可修改的。这就解释了为什么上述代码中 `b = 20;` 这句话没有起作用了。
 
