@@ -148,7 +148,7 @@ a();
 > 5. Call the InitializeImmutableBinding concrete method of envRec passing the String value of Identifier and closure as the arguments.
 > 6. Return closure.
 
-仔细看 step3 和 step5 的 `CreateImmutableBinding` 和 `InitializeImmutableBinding` 将 `Identifier` 作为参数传递。虽然咱不知道他是干啥的但是通过名字咱们能猜测出来，创建、初始化**不可修改**的绑定。所以 NFE 的 方法体中 `Identifier` 变量是不可修改的。这就解释了为什么上述代码中 `b = 20;` 这句话没有起作用了。
+仔细看 step3 和 step5 的 `CreateImmutableBinding` 和 `InitializeImmutableBinding`， 会将 `Identifier` 作为参数传递并调用。虽然咱不知道他是干啥的但是通过名字咱们能猜测出来，创建、初始化**不可修改**的绑定。所以 NFE 的 方法体中 `Identifier` 变量是不可修改的。这就解释了为什么上述代码中 `b = 20;` 这句话没有起作用了。
 
 ```js
 var a = function b() {
@@ -226,7 +226,7 @@ var a = {
 a.b(); // f c()
 ```
 
-那么我**估计?** `function` 前面有表达式就是 函数表达式，否则是函数定义。
+那么我**估计?** `function` 前面有表达式就是 函数表达式，否则是函数声明。
 
 最后，参考：https://segmentfault.com/q/1010000002810093
 
