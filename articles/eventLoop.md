@@ -30,7 +30,6 @@ event loop是一个规范，具体看[这里](event-loop-spec)，每个浏览器
 3. 将 *task* 推到 *event loop* 中和 *task* 同源(*Source*)的 *task queue* 中(没有的话创建一个？)
 3. 如果这里是 *microtask* 直接推到提供的 *event loop* 的 *microtask queue* 中
 
-![newTask][newTask]
 
 > note: *microtask* 也是一个 *task* 其也有 Steps、Source、document、Script evaluation environment settings object set 这四个玩意，但 *microtask queue* 不是 *task queue*
 
@@ -68,6 +67,8 @@ while (/** event loop exist */) {
 ## 以下是个人理解了
 
 流程模型的步骤 2 中执行 *task* 的 *setps* 时可能会有异步任务，产生新的 *task* 或 *microtask*（callbacks），异步任务完成时 *microtask* 会被推到 *microtask queue* ，在下一个 *microtask checkpoint* 可能被执行掉，而 *task* 按照上述 **排列任务** 的流程被推到 *task queue*。而根据同源的策略，这些任务会被推到一个其他 *Source* 的 *task queue*。
+
+![newTask][newTask]
 
 ### 通用源
 在所有规范中，许多几乎不相关的功能都使用以下任务源。
