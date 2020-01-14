@@ -131,8 +131,102 @@ function defineReactive (
 
 ```
 
-依旧很简单，改写了属性的 getter/setter 方法（同时兼容了本身就有 getter/setter 方法的情况）在 getter/setter 时进行操作。简单的说 `Observer` 就是改造目标对象，劫持属性。
+比较好理解，改写了属性的 getter/setter 方法（同时兼容了本身就有 getter/setter 方法的情况）在 getter/setter 时进行操作。简单的说 `Observer` 就是改造目标对象，劫持属性。
+
+这里要注意的是在方法 `defineReactive` 中 `new Dep` 形成了闭包，在 `getter` 时才调用 `dep.depend()`，`setter` 时才通知 `dep.notify()`，这个之后讲
 
 接下来需要一个充当主体的角色，将值多路推送给观察者(Observer)，Vuejs 中就是 `Dep` 了：
 
 ### Dep
+
+Dep 就是个内容发布者，它依托在一个可观察对象内（Observable）可以被多个观察者订阅（Watcher），多路推送消息。
+
+```js
+class Dep {
+  static target: ?Watcher;
+  id: number;
+  subs: Array<Watcher>;
+
+  constructor () {
+    this.id = uid++
+    this.subs = []
+  }
+
+  addSub (sub: Watcher) {
+    this.subs.push(sub)
+  }
+
+  removeSub (sub: Watcher) {
+    remove(this.subs, sub)
+  }
+
+  depend () {
+    if (Dep.target) {
+      Dep.target.addDep(this)
+    }
+  }
+
+  notify () {
+    // stabilize the subscriber list first
+    const subs = this.subs.slice()
+    if (process.env.NODE_ENV !== 'production' && !config.async) {
+      // subs aren't sorted in scheduler if not running async
+      // we need to sort them now to make sure they fire in correct
+      // order
+      subs.sort((a, b) => a.id - b.id)
+    }
+    for (let i = 0, l = subs.length; i < l; i++) {
+      subs[i].update()
+    }
+  }
+}
+
+// The current target watcher being evaluated.
+// This is globally unique because only one watcher
+// can be evaluated at a time.
+Dep.target = null
+const targetStack = []
+
+function pushTarget (target?: Watcher) {
+  targetStack.push(target)
+  Dep.target = target
+}
+
+function popTarget () {
+  targetStack.pop()
+  Dep.target = targetStack[targetStack.length - 1]
+}
+```
+
+结构也比较简单，`subs` 是用来存放所有的观察者（Watcher），`addSub` 和 `removeSub` 管理 `subs`，`notify` 用于通知所有的观察者（调用所有 `subs` 的 `update` 方法）。那么 `target` 相关的是什么。
+
+首先我们知道的 `target` 装的就是观察者（Watcher）， `static target` 作为全局就有一点单例的味道，啥时候会用到它呢，我们简单梳理一下初始化的过程：
+1. 各种初始化
+2. observe data（重写 getter/setter）
+3. 调用 `$mount` 方法，这个时候会 `new Watcher()`
+
+这个 `Watcher` 接收一个 `render` 函数并在初始化调用（这个 `Watcher` 的作用是要渲染组件的 ，具体的下面讲），调用 `render` 函数时会获取对应的值，这个时候触发了我们重写的 `getter` ，触发的过程类似这样的：
+
+```js
+pushTarget(watcher)
+getter()
+popTarget()
+```
+
+那么结合上面的 `Observer`，每个子属性（`defineReactive`处理过）都有一个 `dep`，这个子属性本身可能也是个对象被处理成可观察对象（Observable）, 它也有个 `dep`，那么子属性的子属性..（套娃）这些 `dep` 都被同一个 `Watcher` 订阅了（上述的那个）。
+
+如果这个时候遇到嵌套的情况，比如 `Router` 或 `Vue.extend` 这时候上面的流程还会再来一次，这时候会生成一个新的 观察者（Watcher2）来观察新的数据：
+
+```js
+pushTarget(watcher)
+(getter() {
+    pushTarget(watcher2)
+    getter2()
+    popTarget()
+})()
+popTarget()
+```
+
+类似于这样，这个时候 `targetStack` 就派上用场了，它保留了之前的 `Watcher`，因为是单例的，新的 `dep` 会被 `Watcher2` 给订阅，完事移除 `Watcher2` 继续完成之前的 `watcher` 的订阅，有一点洋葱圈模型的味道。
+
+### Watcher
