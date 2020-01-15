@@ -8,7 +8,7 @@
 
 为什么从数据绑定开始，一是因为它重要，而是因为它比较独立，不依赖框架，可以单独抽出来讲。
 
-###  Observer
+### Observer
 
 总所周知，Vuejs 是通过 数据劫持(`Object.defineProperty()`) 配合观察者模式来实现的数据绑定，所以首先来看看 Vuejs 实现的观察者：
 
@@ -201,6 +201,7 @@ function popTarget () {
 结构也比较简单，`subs` 是用来存放所有的观察者（Watcher），`addSub` 和 `removeSub` 管理 `subs`，`notify` 用于通知所有的观察者（调用所有 `subs` 的 `update` 方法）。那么 `target` 相关的是什么。
 
 首先我们知道的 `target` 装的就是观察者（Watcher）， `static target` 作为全局就有一点单例的味道，啥时候会用到它呢，我们简单梳理一下初始化的过程：
+
 1. 各种初始化
 2. observe data（重写 getter/setter）
 3. 调用 `$mount` 方法，这个时候会 `new Watcher()`
@@ -230,3 +231,202 @@ popTarget()
 类似于这样，这个时候 `targetStack` 就派上用场了，它保留了之前的 `Watcher`，因为是单例的，新的 `dep` 会被 `Watcher2` 给订阅，完事移除 `Watcher2` 继续完成之前的 `watcher` 的订阅，有一点洋葱圈模型的味道。
 
 ### Watcher
+
+`Watcher` 作为观察者，其主要作用就是接收改变的通知并作出反应（渲染 or 通知给我们）。它的主要构成是这样的：
+
+```js
+class Watcher {
+  vm: Component;
+  cb: Function;
+  deps: Array<Dep>;
+  newDeps: Array<Dep>;
+  depIds: SimpleSet;
+  newDepIds: SimpleSet;
+  getter: Function;
+  value: any;
+
+  constructor (
+    vm: Component,
+    expOrFn: string | Function,
+    cb: Function,
+    options?: ?Object,
+    isRenderWatcher?: boolean
+  ) {
+    // options
+    this.cb = cb
+    this.deps = []
+    this.newDeps = []
+    this.depIds = new Set()
+    this.newDepIds = new Set()
+    // parse expression for getter
+    if (typeof expOrFn === 'function') {
+      this.getter = expOrFn
+    } else {
+      this.getter = parsePath(expOrFn)
+    }
+    this.value = this.lazy
+      ? undefined
+      : this.get()
+  }
+
+  /**
+   * Evaluate the getter, and re-collect dependencies.
+   */
+  get () {
+    pushTarget(this)
+    let value
+    const vm = this.vm
+
+    value = this.getter.call(vm, vm)
+    traverse(value)
+
+    popTarget()
+    this.cleanupDeps()
+
+    return value
+  }
+
+  /**
+   * Subscriber interface.
+   * Will be called when a dependency changes.
+   */
+  update () {
+    /* istanbul ignore else */
+    if (this.lazy) {
+      this.dirty = true
+    } else if (this.sync) {
+      this.run()
+    } else {
+      queueWatcher(this)
+    }
+  }
+
+  /**
+   * Scheduler job interface.
+   * Will be called by the scheduler.
+   */
+  run () {
+    const value = this.get()
+    const oldValue = this.value
+    this.value = value
+    this.cb.call(this.vm, value, oldValue)
+  }
+
+  /**
+   * Add a dependency to this directive.
+   */
+  addDep (dep: Dep) {
+    const id = dep.id
+    if (!this.newDepIds.has(id)) {
+      this.newDepIds.add(id)
+      this.newDeps.push(dep)
+      if (!this.depIds.has(id)) {
+        dep.addSub(this)
+      }
+    }
+  }
+
+  /**
+   * Clean up for dependency collection.
+   */
+  cleanupDeps () {
+    let i = this.deps.length
+    while (i--) {
+      const dep = this.deps[i]
+      if (!this.newDepIds.has(dep.id)) {
+        dep.removeSub(this)
+      }
+    }
+    let tmp = this.depIds
+    this.depIds = this.newDepIds
+    this.newDepIds = tmp
+    this.newDepIds.clear()
+    tmp = this.deps
+    this.deps = this.newDeps
+    this.newDeps = tmp
+    this.newDeps.length = 0
+  }
+}
+```
+
+我保留了一些我认为重要的部分，我们来看看逐个了解一下：
+
+`get` ：首先构造函数其实干的事很少，做了一些简单的赋值后直接调用了 `get` 方法，`get` 上面有提到（Dep getter 触发），就是设置 `Dep.target` 调用 `expOrFn`，主要目的就是订阅，也就是我们所说的依赖收集。
+
+`expOrFn`：它作为参数传入，其实就是一个 `getter` 触发器，从名字可以看出来它可能是一个表达式，也可能是一个方法。这里就要先提一下哪些情况会新建一个 `Watcher`：
+
+* 初始化(`$mount`)：上面Dep 初始化有提到，这个时候 `expOrFn` 是一个 渲染函数 `() => vm._update(vm._render(), hydrating)` 解析模版渲染页面的同时触发data的 `getter`，这个时候生成的 `Watcher` 意义重大，控制着 dom 的更新。
+
+* `watch`、 `$watch`：这个时候 `expOrFn` 就是 key ，他会被 `parsePath` 处理成方法调用（`parsePath` 可以处理 `a.b.c` 这种形势的 key）， 还会传入一个 `cb` 方法，在接收更新之后调用。
+
+```js
+Vue.extend({
+  watch: {
+    key: (val) => cbFunction
+  }
+})
+// or
+vm.$watch('key', cbFunction)
+```
+
+* `computed`：稍稍有点不一样，`expOrFn` 就是我们定义的方法，方法内所有被触发 `getter` 的属性都会被当前的 `Watcher` 订阅，`Watcher` 接收到更新消息后还是会调用 `expOrFn` 然后将返回值设为 `value` (key 会被挂在 vm 上，取的就是这个 `value`)
+
+```js
+Vue.extend({
+  computed: {
+    key: cbFunction
+  }
+})
+```
+
+`traverse`: 深度遍历对象，把所有 `getter` 都触发一遍（我不干啥，我就看看）。
+
+`addDep`：`Dep.depend` 就是调用此方法，用于把当前 `Watcher` 存入 `dep` 实例（来来回回有点绕）
+
+`cleanupDeps`：以及 `deps`、`newDeps`、`depIds`、`newDepIds` 这些个玩意，你只要理解他们是防止重复订阅的就可以了。
+
+`update`、`run`：通知更新（`dep.notify`）后调用的就是 `update` 方法,如果是同步的，调用 `run` 方法，`run` 干的事也很简单就是再调一次 `get` 要么重新渲染，要么 `cb` 给我们（此时会重新处理一次订阅）然后更新 `watch` 的 `value`。如果是异步的 调用 `queueWatcher`。
+
+> note: 关于 `queueWatcher` 的东西在 `scheduler.js` 中，也就是所谓的调度器，简单理解就是放到任务队列延迟执行,执行的任务还是 `update` 方法。
+
+#### scheduler
+
+调度器不是很重要，简单提一下（需要了解 `nextTick` 、`event loop`），可跳过。
+
+```js
+const queue = []
+let waiting = false
+let flushing = false
+
+function flushSchedulerQueue() {
+  flushing = true;
+  // 冲刷 queue
+  flushing = waiting = false;
+}
+
+function queueWatcher (watcher: Watcher) {
+  if (!flushing) {
+    queue.push(watcher)
+  } else {
+    // if already flushing, splice the watcher based on its id
+    // if already past its id, it will be run next immediately.
+    let i = queue.length - 1
+    while (i > index && queue[i].id > watcher.id) {
+      i--
+    }
+    queue.splice(i + 1, 0, watcher)
+  }
+  // queue the flush
+  if (!waiting) {
+    waiting = true
+    nextTick(flushSchedulerQueue)
+  }
+}
+```
+
+首先我们知道 `nextTick` 会把 `flushSchedulerQueue` 放进微任务队列(`microtask queue`)。那么 `waiting` 状态就比较好理解，他保证了 `microtask queue` 中只有一个 `flushSchedulerQueue` 任务。而 `flushing` 为 true 的情况发生在 `flushSchedulerQueue` 正在执行时，根据 `watcher.id` 往 `queue` 中插任务如果没有 ‘过号’ 那么新插进来的也会被执行掉，如果 ‘过号’ 了那么保留在 `queue` 等待下一次冲刷。
+整个过程模型和微任务的流程模型简直一毛一样。
+
+***
+
+ok, 至此数据绑定相关的东西（也就是 `core/observer` 下的东西）我们都过了一遍了。现在我们把他们串联起来，来看看 `Vue` 的 ‘心路历程’
