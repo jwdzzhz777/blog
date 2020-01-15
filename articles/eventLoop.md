@@ -4,6 +4,7 @@
 event loop是一个规范，具体看[这里](event-loop-spec)，每个浏览器实现不一样。
 
 *event loop* 有一个或多个*task queues*，一个 *task queue* 是一组 *tasks*
+
 * 每个 *event loop* 都有一个当前正在运行的 *task* ，它可以是 *task* 可以是 null ，在最一开始，它是 null
 * 每个*event loop*都有一个 *microtask queue*，是一个*microtasks*的集合，一开始是空的，*microtask* 是通过微任务算法创建的 *task*
 * 每个 *event loop* 有一个 boolean 值的 *microtask checkpoint* , 默认为 `false` , 每当到达 *microtask* 的执行点时用来判断。
@@ -14,6 +15,7 @@ event loop是一个规范，具体看[这里](event-loop-spec)，每个浏览器
 
 
 ## tasks & microtask
+
 那么什么是 *task*, 详细的看[这里][task]。
 
 *task* 封装了event、callbacks、资源获取(Using a resource)、对dom操作进行响应(Reacting to DOM manipulation
@@ -24,16 +26,17 @@ event loop是一个规范，具体看[这里](event-loop-spec)，每个浏览器
 ## 排列任务
 
 先简单看看一个 *task* 是如何创建并被推到队列中的，([这里][queuing tasks]更详细)：
+
 1. 先看看 *event loop* 是否提供，若否，提供一个 [implied event loop][implied event loop].
 2. 设置 *task* 的 Steps、Source、document、Script evaluation environment settings object set
 
 3. 将 *task* 推到 *event loop* 中和 *task* 同源(*Source*)的 *task queue* 中(没有的话创建一个？)
 3. 如果这里是 *microtask* 直接推到提供的 *event loop* 的 *microtask queue* 中
 
-
 > note: *microtask* 也是一个 *task* 其也有 Steps、Source、document、Script evaluation environment settings object set 这四个玩意，但 *microtask queue* 不是 *task queue*
 
 ### 如何创建一个 microtask
+
 * process.nextTick (node)
 * Promise
 * Object.observe
@@ -58,6 +61,7 @@ event loop是一个规范，具体看[这里](event-loop-spec)，每个浏览器
 ![processing][processing]
 
 类似于
+
 ```js
 while (/** event loop exist */) {
     // run step 1 - 7
@@ -71,7 +75,9 @@ while (/** event loop exist */) {
 ![newTask][newTask]
 
 ### 通用源
+
 在所有规范中，许多几乎不相关的功能都使用以下任务源。
+
 * DOM
 * 用户交互
 * netWorking

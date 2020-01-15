@@ -21,6 +21,7 @@ function create(proto, propertiesObject) {
 ### 如何判断数组
 
 他们之间有什么区别和优劣
+
 ```js
 Object.prototype.toString.call()
 instanceof
@@ -30,6 +31,7 @@ Array.isArray
 `Object.prototype.toString.call()` 取得是对象的 `Symbol.toStringTag` 接口的值(内置对象即便没有也能被 toString 方法识别 比如 Array)，一般是类似于 `[object xxx]` 的字符串，可修改。<br>
 `instanceof` 判断前者原型链上是否出现后者构造函数的 `prototype`，讲道理也可以改 <br>
 `Array.isArray` 我们来看看它的规范：
+
 1. 如果 Type(argument) 不是 `Object` 返回 false
 2. 如果 argument 是一个 [Array exotic object][Array exotic object]，返回 true
 3. 如果 argument 是一个 Proxy exotic object 则判断 `Array.isArray([[ProxyHandler]])`
@@ -183,6 +185,7 @@ export function nextTick (cb?: Function, ctx?: Object) {
 调用 `nextTick` 把回调放入 `callbacks` 然后执行 `timerFunc`。
 
 `timerFunc` 会先做一层判断，根据环境支持依次选择以下方法
+
 1. Promise
 2. MutationObserver
 3. setImmediate

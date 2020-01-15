@@ -6,6 +6,7 @@
 首先 **啥是插件？**
 
 一个插件其实就是一个『迷你的应用』，和应用（app）几乎一样：
+
 * 它包含了 `Service`、`中间件`、`配置`、`框架扩展等等`。
 * 它没有独立的 `Router` 和 `Controller`.
 * 它没有 `plugin.js`，只能声明跟其他插件的依赖，而不能决定其他插件的开启与否。 *摘抄自官网*
@@ -18,6 +19,7 @@
 
 我要抽的是功能类似于 `swagger` 的自动生成 `api` 的插件，
 主要涉及到这些地方：
+
 * 一个拓展的 `helper` 方法
 * 一个用于拦截路由的中间件
 * 插件自身默认的 `config` 配置
@@ -46,6 +48,7 @@
 ├── index.ts
 └── package.json
 ```
+
 > note：`package.json` 是需要的，在这里主要用来声明插件
 > ```
 >"eggPlugin": {
@@ -70,7 +73,9 @@ declare module 'egg' {
     }
 }
 ```
+
 接下来像正常的插件一样使用就可以了，在 `plugin.ts` 中通过 `path` 来挂载插件：
+
 ```ts
 nunjucks: {
     enable: true,
@@ -81,6 +86,7 @@ genome: {
     path: join(__dirname, '../app/lib/plugin/egg-genome')
 }
 ```
+
 > note: 因为插件没有 `plugin.ts` 所以如果插件依赖其他插件的话只能在项目中手动挂载依赖项
 
 **运行一下**
@@ -93,6 +99,7 @@ genome: {
 
 接下来就是正式抽离项目了
 就像正常的项目一样初始化并吧代码复制进来，不一样的是需要加上自己的 `tsconfig.ts`了，而且 `package.json` 也要完整一下。添加一下依赖：
+
 ```json
 "dependencies": {
     "reflect-metadata": "^0.1.13"
@@ -105,6 +112,7 @@ genome: {
     "typescript": "^3.7.2"
 },
 ```
+
 > note: 注意添加 `tslib` 和 `tslint-config-egg` 两个依赖
 
 因为发布的插件必须是 `.js` 的所以需要把 `.ts` 翻译成 `.js` 过后再发布，增加 `script`:
@@ -116,7 +124,9 @@ genome: {
     "clean": "tsc -b --clean"
 },
 ```
+
 添加发布的文件和关键字
+
 ```json
 "files": [
     "index.js",
@@ -134,6 +144,7 @@ genome: {
     "egg-genome"
 ]
 ```
+
 **ok, 发布，试试效果**
 
 emmmmmmmmmm...
@@ -150,6 +161,7 @@ emmmmmmmmmm...
 这样所有文件就会自动生成 `.js` 和 `.d.ts` 文件了。
 
 然后 `package.json` 也改一下：
+
 ```json
 "files": [
     "index.js",
@@ -164,6 +176,7 @@ emmmmmmmmmm...
 ```
 
 最后把原先 `index.d.ts` 中的东西挪到 `index.ts` 中
+
 ```ts
 export * from './app/lib/types';
 export * from './app/lib/decorators';

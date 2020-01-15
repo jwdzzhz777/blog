@@ -13,6 +13,7 @@ var b = 10;
 答案是 `f b() {...}`。为什么，我们从头开始看起。
 
 定义一个函数有三种方法
+
 * function declaration 函数声明
 * function expression 函数表达式
 * `Function` 构造函数
@@ -22,11 +23,13 @@ var b = 10;
 ## function declaration
 
 [函数声明][function declaration]比较简单，其语法是这样的：
+
 ```js
 function name([param[, param,[..., param]]]) {
    [statements]
 }
 ```
+
 > note:`name` 是必须的
 
 ### 函数声明提升
@@ -82,6 +85,7 @@ if (...) {
 ## Function expression
 
 [函数表达式][Function expression] 的表达式是这样的：
+
 ```js
 var myFunction = function [name]([param1[, param2[, ..., paramN]]]) {
    statements
@@ -141,6 +145,7 @@ a();
 ```
 
 可以看到这种情况方法体内 b 是 `Identifier` 而不是全局的 b 但是为什么 `b = 20;` 这一句并没有执行呢？依旧是看 [ECMA 规范][ECMA] 中，创建一个 NFE 的步骤，它比其他情况要复杂的多：
+
 > 1. Let funcEnv be the result of calling NewDeclarativeEnvironment passing the running execution context’s Lexical Environment as the argument
 > 2. Let envRec be funcEnv’s environment record.
 > 3. Call the CreateImmutableBinding concrete method of envRec passing the String value of Identifier as the argument.

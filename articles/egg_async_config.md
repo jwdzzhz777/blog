@@ -149,6 +149,7 @@ import 'egg-sequelize';
 ][update_life_circle]
 
 那么我们也优化下，之前 `app.ts` 和 `agent.ts` 都是函数的形式，现在都改成类的形式。
+
 ```ts
 import { Application } from 'egg';
 
@@ -174,6 +175,7 @@ class AppBootHook {
 
 export default AppBootHook;
 ```
+
 `willReady` 运行在插件加载之前，所以我们获取配置放在这里， `didLoad` 运行在插件加载好之后，我们可以对加载好的插件进行造作
 `this.app.xxx = ...`
 

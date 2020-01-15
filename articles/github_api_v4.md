@@ -9,6 +9,7 @@
 ### why GraphQL?
 
 为什么 github 要选择 GraphQL ? 这里有官方的[公告博客文章][blog_post]。简单说就是三点：
+
 * 可拓展性。尽管 `REST API` 覆盖了很全的信息，但有时候我们需要两到三个请求才能拿到我们需要的资源，而且通常一个 api 给了我们太多的信息，而我们只需要其中一部分。
 * 想从终端获取更多元数据信息。比如确定每个终端所需的 OAuth 范围、更智能的发放数据、确保参数类型的安全性。
 * 从代码生成文档。而不是手动更新维护
@@ -45,9 +46,11 @@ curl(HOST, {
 根据教程点点点就完事了，获得 `token` 记得保存，因为出于安全考虑再次进入页面你就看不到了。
 
 然后就可以开始调接口了，GraphQL API v4 只有一个端点
+
 ```
 https://api.github.com/graphql
 ```
+
 > note:请求必须是 `POST`
 
 ```js
@@ -109,6 +112,7 @@ curl('https://api.github.com/graphql', {
     }
 }
 ```
+
 > note: `$name_of_repository` 是 repository 的名字，`expression` 是一个表达式 `'xx：xx'` 前面是分支，后面是路径。
 > 这里 'master:' 代表root
 
@@ -117,6 +121,7 @@ curl('https://api.github.com/graphql', {
 ### 获取单个文件数据
 
 和上面一样类似拿到单个 [`object`][object_url]，再通过 [`Blob`][blob_url]。
+
 ```js
 {
     query: `
@@ -138,6 +143,7 @@ curl('https://api.github.com/graphql', {
     }
 }
 ```
+
 > note: `object expression 'master:.gitignore'` 指向了 .gitignore 文件
 
 <img src="https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/github_api_v4/1574242351509.jpg" height="64" >
@@ -174,6 +180,7 @@ variables: {
     'name_of_repository': 'web-test-zhihu'
 }
 ```
+
 > note: `ref` :repository 的 引用，`qualifiedName: 'master'` 代表 master 分子的引用
 > `history path` 路径，非必填，不填写则返回 该分支所有的 commit list ,否则返回和路径匹配的对象的 commit list
 
@@ -237,6 +244,7 @@ variables: {
     }
 }
 ```
+
 结果：<img src="https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/github_api_v4/1574337333984.jpg" width="286">
 
 两种方法其实差不多,从这里可以看出 graphql 真的很灵活！
