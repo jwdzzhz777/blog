@@ -355,7 +355,7 @@ class Watcher {
 
 `expOrFn`：它作为参数传入，其实就是一个 `getter` 触发器，从名字可以看出来它可能是一个表达式，也可能是一个方法。这里就要先提一下哪些情况会新建一个 `Watcher`：
 
-* 初始化(`$mount`)：上面Dep 初始化有提到，这个时候 `expOrFn` 是一个 渲染函数 `() => vm._update(vm._render(), hydrating)` 解析模版渲染页面的同时触发data的 `getter`，这个时候生成的 `Watcher` 意义重大，控制着 dom 的更新。
+* 初始化(`$mount`)：上面Dep 初始化有提到，这个时候 `expOrFn` 是一个 渲染函数 `() => vm._update(vm._render(), hydrating)` 解析模版渲染页面的同时触发data的 `getter`（具体后面讲），这个时候生成的 `Watcher` 意义重大，控制着 dom 的更新。
 
 * `watch`、 `$watch`：这个时候 `expOrFn` 就是 key ，他会被 `parsePath` 处理成方法调用（`parsePath` 可以处理 `a.b.c` 这种形势的 key）， 还会传入一个 `cb` 方法，在接收更新之后调用。
 
@@ -430,3 +430,40 @@ function queueWatcher (watcher: Watcher) {
 ***
 
 ok, 至此数据绑定相关的东西（也就是 `core/observer` 下的东西）我们都过了一遍了。现在我们把他们串联起来，来看看 `Vue` 的 ‘心路历程’
+
+```js
+// 应用初始化
+_init() {
+  // 初始化数据相关，当然前后还有其他的许多初始化，Lifecycle、Events 等等
+  initState() {
+    // 处理 data
+    initData() {
+      // 这里会将 data 可观察化 也就是设置 getter/setter
+      observe() {
+        new Observer();
+      }
+      proxy() // 代理到 vm 实例上
+    }
+    // data 处理好就可以被监听器订阅了
+    initComputed() { new Watcher() }
+    initWatch() { new Watcher() }
+  }
+  // 解析模版、渲染
+  $mount() { 
+    compileToFunctions() {
+      // 这里会将模版处理成渲染函数，类似这样：
+      vm.$option.render = with(this) {
+        return _c('div', ...) // _c 就是我们用的 createElement 方法
+      }
+    }
+    mountComponent() {
+      updateComponent = () => vm._update(vm._render(), hydrating);
+      new Watcher(vm, updateComponent); // 调用 updateComponent， 渲染页面， 触发 getter ，依赖收集
+    }
+  }
+}
+```
+
+大概就这样，里面很多细枝末节就不提了，这些方法名都是 `Vue` 里面存在的，一搜就能找到，这里提一下 `proxy`：
+此 `proxy` 不是我们想的 `es6 proxy` 他的作用是将 `$data` 的属性代理到 `vm` 实例上，方便我们 `this.xxx` 调用。
+
