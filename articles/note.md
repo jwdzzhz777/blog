@@ -1,6 +1,87 @@
 # 知识点笔记
 
+一些知识点笔记，或者题目都会放在这里，比较丰富的内容会单独抽出来。
+
+## 如果我出题
+
+### Object.definne
+
+以下输出什么
+
+```js
+let a = {};
+Object.defineProperty(a, 'i', {
+  value: 0
+});
+
+a.i++;
+
+console.log(a.i);
+```
+
+```js
+let a = 1;
+
+Object.defineProperty(window, 'a', {
+  get() {
+    return 2;
+  }
+});
+
+console.log(window.a);
+console.log(a);
+```
+
+下面会发生什么
+
+```js
+var b = 1;
+
+Object.defineProperty(window, 'b', {
+  get() {
+    return 2;
+  }
+});
+```
+
 ## javascript
+
+### 平等表达式 `==`
+
+```js
+var a = ?;
+if(a == 1 && a == 2 && a == 3){
+  console.log(1);
+}
+```
+
+见 blog 从一道题了解 `==`
+
+### 实现 flatten 函数
+
+简单的说就是数组降维
+
+递归实现：
+
+```js
+function flatten(arr) {
+  let result = [];
+  arr.forEach(item => {
+    if (Array.isArray(item)) {
+      result = result.concat(flatten(item));
+    } else {
+      result.push(item);
+    }
+  });
+  return result;
+}
+```
+
+非递归：
+
+```js
+arr.toString().split(',');
+```
 
 ### 自己实现 Object.create
 
