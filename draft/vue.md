@@ -467,3 +467,277 @@ _init() {
 大概就这样，里面很多细枝末节就不提了，这些方法名都是 `Vue` 里面存在的，一搜就能找到，这里提一下 `proxy`：
 此 `proxy` 不是我们想的 `es6 proxy` 他的作用是将 `$data` 的属性代理到 `vm` 实例上，方便我们 `this.xxx` 调用。
 
+## Virtual DOM
+
+ok 我们了解完了 `Vuejs` 数据绑定的过程，接下来我们看看编译渲染 DOM 的过程。之前提到，在实例化方法 `_init` 的最后会调用 `$mount` 来解析模版、渲染，现在我们来仔细看看。
+
+### Compiler
+
+首先是编译，`$mount` 中调用 `compileToFunctions` 将 `<template>` 文本转化成一个 `render` 函数，我们来看看 `compileToFunctions` 都做了什么：
+
+```js
+function baseCompile (
+  template: string,
+  options: CompilerOptions
+): CompiledResult {
+  const ast = parse(template.trim(), options)
+  // ast 优化
+  if (options.optimize !== false) {
+    optimize(ast, options)
+  }
+  const code = generate(ast, options)
+  return {
+    ast,
+    render: code.render,
+    staticRenderFns: code.staticRenderFns
+  }
+}
+
+function createCompiler (baseOptions: CompilerOptions) {
+  function compile (
+    template: string,
+    options?: CompilerOptions
+  ): CompiledResult {
+    const finalOptions = Object.create(baseOptions)
+    // 省略了一些 option 的处理
+
+    const compiled = baseCompile(template.trim(), finalOptions)
+
+    return compiled
+  }
+
+  return {
+    compile,
+    compileToFunctions: createCompileToFunctionFn(compile)
+  }
+}
+```
+
+提取了其中代码，把生成方法和 option 的处理部分删掉了，完整的可以到 `src/compile` 中去看，`compileToFunctions` 方法由 `createCompiler` 方法生成，不过主要的内容在 `baseCompile` 方法中，我们主要来看看这个方法。
+
+里面就两步，`parse`，`generate`，我们依次来看。
+
+#### parse
+
+`parse`方法的代码都在 `compile/parse` 中，其主要功能就是将 `template` 编译成 AST。我们先了解以下语法树的基本结构：
+
+```js
+function createASTElement (
+  tag: string,
+  attrs: Array<ASTAttr>,
+  parent: ASTElement | void
+): ASTElement {
+  return {
+    type: 1,
+    tag,
+    attrsList: attrs,
+    attrsMap: makeAttrsMap(attrs),
+    rawAttrsMap: {},
+    parent,
+    children: []
+  }
+}
+```
+
+因为是将 `html` 代码转换成 AST 所以结构简单多了，主要是标签名 `tag` (`<tag>`) 和 属性 `attrsMap`（key: value）以及层级关系 `children`,`parent`。
+
+接下来了解下 `html-parse` ，他是转换 AST 的核心代码，其本身来自于一个开源代码的扩展：[simplehtmlparser][simplehtmlparser]。代码就不贴了，自行了解下。
+
+> note: 注意这不是 `Vuejs` 的源码，而是在这之上做的改造，我们借助它来简单了解
+
+其实就是正则判断，判断 `template` 文本的开头是什么，对应有这么几种情况：
+
+* `<!--`开头，也就是注释，这种情况再找到结尾 `-->` 直接删了。
+* `<!DOCTYPE` 开头，文档类型，和上面一样，删了。
+* `<name` 开头，开始标签(`start tag`)，执行 `parseStartTag`
+* `</name` 开头，结束标签(`end tag`)，执行 `parseEndTag`
+
+那么我们回归 `Vuejs` 本身，其实主要逻辑差不多，先简单看看流程模型：
+
+```js
+function parse(tamplate) {
+  let currentParent, stack;
+  parseHTML(tamplate, start, end) {
+    if (startTag) {
+      let match = parseStartTag(template)
+      start(match)
+    }
+    if (endTag) {
+      parseEndTag(template);
+      end()
+    }
+
+    function parseStartTag() {}
+    function parseEndTag() {}
+  }
+
+  function start() {}
+  function end() {}
+}
+```
+
+代码精简了很多，主要的解析流程就是如此，首先是 `parseHTML` 里面是如何解析的，我们结合上面了解的一起看：
+
+```js
+const attribute = /^\s*([^\s"'<>\/=]+)(?:\s*(=)\s*(?:"([^"]*)"+|'([^']*)'+|([^\s"'=<>`]+)))?/
+const dynamicArgAttribute = /^\s*((?:v-[\w-]+:|@|:|#)\[[^=]+\][^\s"'<>\/=]*)(?:\s*(=)\s*(?:"([^"]*)"+|'([^']*)'+|([^\s"'=<>`]+)))?/
+const ncname = `[a-zA-Z_][\\-\\.0-9_a-zA-Z${unicodeRegExp.source}]*`
+const qnameCapture = `((?:${ncname}\\:)?${ncname})`
+const startTagOpen = new RegExp(`^<${qnameCapture}`)
+const startTagClose = /^\s*(\/?)>/
+
+function parseStartTag(html) {
+  const start = html.match(startTagOpen)
+  if (start) {
+    const match = {
+      tagName: start[1],
+      attrs: [],
+      start: index
+    }
+    advance(start[0].length)
+    let end, attr
+    while (!(end = html.match(startTagClose)) && (attr = html.match(dynamicArgAttribute) || html.match(attribute))) {
+      attr.start = index
+      advance(attr[0].length)
+      attr.end = index
+      match.attrs.push(attr)
+    }
+    if (end) {
+      match.unarySlash = end[1]
+      advance(end[0].length)
+      match.end = index
+      return match
+    }
+  }
+}
+```
+
+首先是 `parseStartTag` 方法，其通过正则查找类似 `<tagName` 的文本，记录其位置并通过子表达式得到 `tagName`，`advance` 方法用于将匹配到的值剔除，`while` 循环中不断通过正则查找并记录 `attribute` 然后删除，当匹配到 `startTagClose` 时结束(`>` 或 `/>`)，
+记录子表达式（`/` 或 ` `），最后得到一个 `match` 对象，大概长这样：
+
+```js
+match = {
+  tagName: 'div',
+  attrs: [
+    ['v-model="xxx"', 'v-model', '=', 'xxx']
+  ],
+  start: Number,
+  end: Number,
+  unarySlash: '/' || ''
+}
+```
+
+得到 `match` 对象后调用 `startHandler` 进一步处理，现在的 `attrs` 还是字符串（不过已经把属性名和值都取到了，这个正则还是给力的），先处理成 `Map` ，然后才是创建 AST，然后经过一些处理（`v-for`、`v-if` 之类的属性），最后放入 `stack` 中。
+
+```js
+function start(match) {
+  let tag = match.tagName;
+  let attrs = ...; // 处理成 map
+  let element: ASTElement = createASTElement(tag, attrs, currentParent)
+  processPre(element)
+  processRawAttrs(element)
+  processFor(element)
+  processIf(element)
+  processOnce(element)
+
+  if (!unary) {
+    currentParent = element
+    stack.push(element);
+  } else {
+    currentParent.children.push(element)
+    element.parent = currentParent
+  }
+}
+```
+
+这里说明以下，`stack` 和 `currentParent` 在父级作用域，也就是 `parse` 方法中，用来处理父子关系。而 `unary` 是用来判断 `element` 是不是非特殊标签 (`<br/>`这种)，并且是不是 `/>` 结尾。如果是就传入 `stack` 继续处理，直到遇到 `endTag`：
+
+```js
+function parseEndTag (html) {
+  let endTagMatch = html.match(endTag)
+  advance(endTagMatch[0].length)
+  ... // 主要还是判断那些个什么<br />啦<p /> 啦
+  end(endTagMatch[1])
+}
+
+function end(tagName) {
+  const element = stack[stack.length - 1]
+  // pop stack
+  stack.length -= 1
+  currentParent = stack[stack.length - 1]
+  currentParent.children.push(element)
+  element.parent = currentParent
+}
+```
+
+`end` 的主要功能就是取出 `stack` 栈顶，和其前面一项确认父子关系，把 `currentParent` 设置为取出后的栈顶。
+
+简单的说：
+
+* 解析到 `startTag` 就创建 `ASTElement`。
+   如果是 `/>` 就和 stact 最后一项（`currentParent`）确认父子关系
+   不是就将 `element` 推入 `stack`
+* 解析到 `endTag` 就取出栈尾（`element`），`currentParent` 往前移(新的栈尾)，
+  `element` 和 `currentParent` 确认父子关系
+
+如此不断的循环。
+
+这些就是 `parse` 的主要功能了，当然还有其他的，比如 `text-parse` 主要负责文本的处理(主要处理双括号的语法`{{expression}}`，转换成 `_s(expression)`)，而`filter-parse` 负责管道的处理 (`{{value | filter}}` => `_s(_f("filter")(value))`)，注意这里都是处理成字符串哦，至于 `_s`、`_f` 是什么，我们接下来讲。最后看一下例子，之后我们也会按照这个例子走下去：
+
+```html
+<div id="editor">
+  <input v-model="input"></input>
+  {{input | nothing}}
+</div>
+
+<script>
+new Vue({
+  el: '#editor',
+  data: {
+    input: 'input'
+  },
+  filter: {
+    nothing(a) {
+      return a;
+    }
+  }
+})
+</script>
+```
+
+`parse` 方法得到：
+
+```js
+ast = {
+  type: 1,
+  tag: 'div',
+  attrsList: [{name: 'id', value: 'editor'}]
+  attrsMap: {id: 'editor'},
+  children: [
+    {
+      type: 1,
+      tag: 'input',
+      attrsList: [{name: 'v-model', value: 'input'}]
+      attrsMap: {'v-model': 'input'},
+      parent: ast,
+      events: {
+        input: {value: '"if($event.target.composing)return;input=$event.target.value"'}
+      }
+      children: []
+    },
+    {
+      type: 2,
+      expression: `"\n      "+_s(_f("nothing")(input))+"\n    "`,
+      tokens: [{'@binding': "_f("nothing")(input)"}]
+    }
+  ]
+}
+```
+
+可以看到，除了解析 `标签` , `属性` , `父子关系` 之外，遇到 `vue` 特性（`@click` 啥的）会有特殊的处理：`{{expression}}` 会被解析成 `_s(expression)`，`filter` 是 `_f(expression)`，`@name="expression"` 则会在 `ASTElement.event` 上多加一个字段 `name: expression`，`v-if` 则会在 `ASTElement` 上多加标记(`ifProcessed: expression`) 等等，就不一一列了。
+
+#### codegen
+
+`parse` 方法将模版解析成 `ast`，那么接下来 `generate` 方法将会把 `ast` 转化成一个 `render` 函数
+
+[simplehtmlparser]:http://erik.eae.net/simplehtmlparser/simplehtmlparser.js
