@@ -2,7 +2,7 @@
 
 为了更深入了解 Vuejs 我决定，边读源码边自己实现一些简单的功能。
 
-> note:文中的代码会进行缩减/修改，不然太多环境判断之类的代码不好阅读。
+> note:文中的代码会进行缩减/修改，不然太多环境判断之类的代码不好阅读。建议边看源代码边读。
 
 ## 数据绑定
 
@@ -806,7 +806,7 @@ function genData (el: ASTElement, state: CodegenState): string {
 }
 ```
 
-截取了其中一小部分，主要就是通过 `genElement` 生成类似 `_c(tagName, Object, [children])` 这样的字符串，之后会被当作表达式调用，`_c` 方法其实就是 `render` 函数中提供的 `createElement` 方法。
+截取了其中一小部分，主要就是通过 `genElement` 生成类似 `_c(tagName, Data, [children])` 这样的字符串，之后会被当作表达式调用，`_c` 方法其实就是 `render` 函数中提供的 `createElement` 方法。
 
 接触过 `render` 函数的话应该很好理解，也就是说不管怎么样最终都会回到 `render` 函数，如果你直接用 `render` 函数还能提高性能（省去了 `parse` 的过程）。那么我们看看[官方文档][createElement]。
 
@@ -854,6 +854,71 @@ vm.options.render = function() {
 注意了，之所以这么做，以及使用 `with` 语法，主要原因是 `Compiler` 并未对表达式进行解析处理，而是完整保留了表达式，通过 `with` 语句保证真正执行 `render` 函数时能够正确执行表达式，并从 `vm` 实例中取到正确的值。
 
 ok,至此 `Compiler` 的任务完成。
+
+### VNode
+
+之前提到在生成 `render` 函数之后 `new Watcher` 时会传入一个渲染函数：
+
+```js
+const updateComponent = () => {
+  vm._update(vm._render(), hydrating)
+}
+```
+
+抛去各种判断，`_render` 方法其实就是调用了 `render.call(vm)` 得到 `vnode`，而 `render` 中调用各种 `_x()`
+ 方法处理各种情况，这些代码都在 `core/instance/render-helpers` 中，有兴趣可以看下，其中最主要的 `_c`  也就是 `createElement` ，代码位于 `core/vdom/create-element` 中。其主要功能也很简单，说白了就是通过传入的 `tagName`、 `Data` 和 `[children]` 生成 `vnode`:
+
+ ```js
+function createElement(
+  context: Component, // vm 实例
+  tag: any,
+  data: any,
+  children: any
+) {
+  // 内置的 html 标签 或 svg 标签
+  if (isHTMLTag(tag) || isSVG(tag)) {
+    vnode = new VNode(tag, data, children, undefined, undefined, context)
+  } else if (isDef(Ctor = resolveAsset(context.$options, 'components', tag))) { // 处理组件
+    vnode = createComponent(Ctor, data, context, children, tag)
+  } else {
+    // 其他不知道的莫名其妙的标签名
+    vnode = new VNode(tag, data, children, undefined, undefined, context)
+  }
+}
+```
+
+这里说一下，如果遇到不认识的 `tag` 会判断 `$options.components` 中有没有相应 `name` 的对象，返回相应的对象 `Ctor`，如果有，会执行 `createComponent` ：
+
+```js
+function createComponent(
+  Ctor: Class<Component> | Function | Object | void,
+  data: ?VNodeData,
+  context: Component,
+  children: ?Array<VNode>,
+  tag?: string
+) {
+  if (isObject(Ctor)) {
+    // 这个就是当前环境的 Vue class 
+    // Vue.options._base = Vue
+    const baseCtor = context.$options._base
+
+    Ctor = baseCtor.extend(Ctor)
+
+    const name = Ctor.options.name || tag
+    const vnode = new VNode(
+      `vue-component-${Ctor.cid}${name ? `-${name}` : ''}`,
+      data, undefined, undefined, undefined, context,
+      { Ctor, data, data.on, tag, children }
+    )
+  }
+}
+```
+
+其实就是执行 `Vue.extend(Ctor)` 生成一个带有 `componentOptions` 的 `vnode` 说到底最终都是生成 `vnode` 我们来了解以下它的结构： 
+
+```js
+
+```
 
 [simplehtmlparser]:http://erik.eae.net/simplehtmlparser/simplehtmlparser.js
 [createElement]:https://cn.vuejs.org/v2/guide/render-function.html#createElement-%E5%8F%82%E6%95%B0
