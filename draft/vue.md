@@ -734,10 +734,126 @@ ast = {
 }
 ```
 
+> note: 提一嘴，`type` 1 是元素， 3 是注释，其他当 文本处理
+
 可以看到，除了解析 `标签` , `属性` , `父子关系` 之外，遇到 `vue` 特性（`@click` 啥的）会有特殊的处理：`{{expression}}` 会被解析成 `_s(expression)`，`filter` 是 `_f(expression)`，`@name="expression"` 则会在 `ASTElement.event` 上多加一个字段 `name: expression`，`v-if` 则会在 `ASTElement` 上多加标记(`ifProcessed: expression`) 等等，就不一一列了。
 
 #### codegen
 
-`parse` 方法将模版解析成 `ast`，那么接下来 `generate` 方法将会把 `ast` 转化成一个 `render` 函数
+`parse` 方法将模版解析成 `ast`，那么接下来 `generate` 方法将会把 `ast` 转化成一个 `render` 函数，我们来简单看看：
+
+```js
+function generate(ast) {
+  const code = ast ? genElement(ast) : '_c("div")'
+  return {
+    render: `with(this){return ${code}}`
+  }
+}
+
+function genElement(ast) {
+  if (el.staticRoot) genStatic(el)
+  else if (el.once) genOnce(el)
+  else if (el.for) genFor(el)
+  else if (el.if) genIf(el)
+  else if (el.tag === 'template') genChildren(el)
+  else if (el.tag === 'slot') genSlot(el)
+  else {
+    if (el.component) {
+      code = genComponent(el.component, el, state)
+    } else {
+      let data = genData(el, state)
+      let children = genChildren(el, state, true)
+      let code = `_c('${el.tag}'${
+        data ? `,${data}` : '' // data
+      }${
+        children ? `,${children}` : '' // children
+      })`
+    }
+  }
+  return code;
+}
+
+function genChildren(el) {
+  return `[${el.children.map(c => genElement(c)).join(',')}]${
+    normalizationType ? `,${normalizationType}` : ''
+  }`
+}
+
+function genComponent (componentName, comment: ASTText): string {
+  const children = el.inlineTemplate ? null : genChildren(el)
+  return `_c(${componentName},${genData(el, state)}${
+    children ? `,${children}` : ''
+  })`
+}
+
+function genData (el: ASTElement, state: CodegenState): string {
+  let data = '{'
+  if (dirs) data += dirs + ','
+  if (el.key) data += `key:${el.key},`
+  if (el.ref) data += `ref:${el.ref},`
+  if (el.refInFor) data += `refInFor:true,`
+  if (el.pre) data += `pre:true,`
+  if (el.component) data += `tag:"${el.tag}",`
+  if (el.attrs) data += `attrs:${genProps(el.attrs)},`
+  if (el.props) data += `domProps:${genProps(el.props)},`
+  if (el.events) data += `${genHandlers(el.events, false)},`
+  if (el.nativeEvents) data += `${genHandlers(el.nativeEvents, true)},`
+  if (el.slotTarget && !el.slotScope) data += `slot:${el.slotTarget},`
+
+  data = data.replace(/,$/, '') + '}'
+
+  return data
+}
+```
+
+截取了其中一小部分，主要就是通过 `genElement` 生成类似 `_c(tagName, Object, [children])` 这样的字符串，之后会被当作表达式调用，`_c` 方法其实就是 `render` 函数中提供的 `createElement` 方法。
+
+接触过 `render` 函数的话应该很好理解，也就是说不管怎么样最终都会回到 `render` 函数，如果你直接用 `render` 函数还能提高性能（省去了 `parse` 的过程）。那么我们看看[官方文档][createElement]。
+
+`createElement` 有三个参数，第一个参数是 `html` 的标签名字，直接通过 `element.tag` 得到(`parse` 解析取得)。第二个参数是一个数据对象，其值通过 `genData` 方法处理（普通属性、dom属性、style、class、事件等等），第三个参数是子虚拟节点的集合，其也由 `createElement` 构建而成，在 `genElement` 中循环处理 `element.children`。
+
+最终 `generate` 会将 `ast` 包装成类似 `with(this){return _c(...)}` 的字符串，还是上面的例子，最终会输出这样：
+
+```js
+const render = `with(this){return _c('div',{attrs:{"id":"editor"}},[_c('input',{directives:[{name:"model",rawName:"v-model",value:(input),expression:"input"}],domProps:{"value":(input)},on:{"input":function($event){if($event.target.composing)return;input=$event.target.value}}}),_v("\n      "+_s(_f("nothing")(input))+"\n    ")])}`
+```
+
+最后我们通过 `Function` 将其转换成一个方法，并绑定在 `vm.options` 上：
+
+```js
+vm.options.render = new Function(code);
+
+// 还是之前的例子，render 长这样子：
+vm.options.render = function() {
+  with (this) {
+    return _c(
+      'div',{attrs:{"id":"editor"}},
+      [
+        _c(
+          'input',
+          {
+            directives:[
+              {
+                name:"model",
+                rawName:"v-model",
+                value:(input),
+                expression:"input"
+              }
+            ],
+            domProps:{"value":(input)},
+            on:{"input":function($event){if($event.target.composing)return;input=$event.target.value}}
+          }
+        ),
+        _v("\n      "+_s(_f("nothing")(input))+"\n    ")
+      ]
+    )
+  }
+}
+```
+
+注意了，之所以这么做，以及使用 `with` 语法，主要原因是 `Compiler` 并未对表达式进行解析处理，而是完整保留了表达式，通过 `with` 语句保证真正执行 `render` 函数时能够正确执行表达式，并从 `vm` 实例中取到正确的值。
+
+ok,至此 `Compiler` 的任务完成。
 
 [simplehtmlparser]:http://erik.eae.net/simplehtmlparser/simplehtmlparser.js
+[createElement]:https://cn.vuejs.org/v2/guide/render-function.html#createElement-%E5%8F%82%E6%95%B0
