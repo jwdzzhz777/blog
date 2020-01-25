@@ -684,6 +684,8 @@ function end(tagName) {
 
 这些就是 `parse` 的主要功能了，当然还有其他的，比如 `text-parse` 主要负责文本的处理(主要处理双括号的语法`{{expression}}`，转换成 `_s(expression)`)，而`filter-parse` 负责管道的处理 (`{{value | filter}}` => `_s(_f("filter")(value))`)，注意这里都是处理成字符串哦，至于 `_s`、`_f` 是什么，我们接下来讲。最后看一下例子，之后我们也会按照这个例子走下去：
 
+##### examples
+
 ```html
 <div id="editor">
   <input v-model="input"></input>
@@ -788,6 +790,10 @@ function genComponent (componentName, comment: ASTText): string {
 
 function genData (el: ASTElement, state: CodegenState): string {
   let data = '{'
+  // directives first.
+  // directives may mutate the el's other properties before they are generated.
+  const dirs = genDirectives(el, state)
+  if (dirs) data += dirs + ','
   if (dirs) data += dirs + ','
   if (el.key) data += `key:${el.key},`
   if (el.ref) data += `ref:${el.ref},`
@@ -822,8 +828,11 @@ const render = `with(this){return _c('div',{attrs:{"id":"editor"}},[_c('input',{
 
 ```js
 vm.options.render = new Function(code);
+```
 
-// 还是之前的例子，render 长这样子：
+还是之前的<a href='#example'>例子</a>，其结果大概是这样：
+
+```js
 vm.options.render = function() {
   with (this) {
     return _c(
@@ -914,11 +923,111 @@ function createComponent(
 }
 ```
 
-其实就是执行 `Vue.extend(Ctor)` 生成一个带有 `componentOptions` 的 `vnode` 说到底最终都是生成 `vnode` 我们来了解以下它的结构： 
+其实就是执行 `Vue.extend(Ctor)` 生成一个带有 `componentOptions` 的 `vnode`。 说到底最终都是生成 `vnode` 那么我们来了解以下它的结构： 
 
 ```js
+class VNode {
+  tag: string | void;
+  data: VNodeData | void;
+  children: ?Array<VNode>;
+  text: string | void;
+  elm: Node | void;
+  ns: string | void;
+  context: Component | void; // rendered in this component's scope
+  key: string | number | void;
+  componentOptions: VNodeComponentOptions | void;
+  componentInstance: Component | void; // component instance
+  parent: VNode | void; // component placeholder node
 
+  // strictly internal
+  raw: boolean; // contains raw HTML? (server only)
+  isStatic: boolean; // hoisted static node
+  isRootInsert: boolean; // necessary for enter transition check
+  isComment: boolean; // empty comment placeholder?
+  isCloned: boolean; // is a cloned node?
+  isOnce: boolean; // is a v-once node?
+  asyncFactory: Function | void; // async component factory function
+  asyncMeta: Object | void;
+  isAsyncPlaceholder: boolean;
+  ssrContext: Object | void;
+  fnContext: Component | void; // real context vm for functional nodes
+  fnOptions: ?ComponentOptions; // for SSR caching
+  devtoolsMeta: ?Object; // used to store functional render context for devtools
+  fnScopeId: ?string; // functional scope id support
+
+  constructor (
+    tag?: string,
+    data?: VNodeData,
+    children?: ?Array<VNode>,
+    text?: string,
+    elm?: Node,
+    context?: Component,
+    componentOptions?: VNodeComponentOptions,
+    asyncFactory?: Function
+  ) {
+    this.tag = tag
+    this.data = data
+    this.children = children
+    this.text = text
+    this.elm = elm
+    this.ns = undefined
+    this.context = context
+    this.fnContext = undefined
+    this.fnOptions = undefined
+    this.fnScopeId = undefined
+    this.key = data && data.key
+    this.componentOptions = componentOptions
+    this.componentInstance = undefined
+    this.parent = undefined
+    this.raw = false
+    this.isStatic = false
+    this.isRootInsert = true
+    this.isComment = false
+    this.isCloned = false
+    this.isOnce = false
+    this.asyncFactory = asyncFactory
+    this.asyncMeta = undefined
+    this.isAsyncPlaceholder = false
+  }
+
+  // DEPRECATED: alias for componentInstance for backwards compat.
+  /* istanbul ignore next */
+  get child (): Component | void {
+    return this.componentInstance
+  }
+}
 ```
+
+`vnode` 构造函数主要接收的就是 `createElemetn` 的参数，其本质也是生成一个结构对象，不过和 `ast` 不同的是，`ast` 保留了表达式，而 `vnode` 是将表达式执行完的结果，他是静态的，也就是说与之对应的是一个确定的渲染结果。依旧是那个例子：
+
+```js
+const vnode = {
+  tag: 'div',
+  data: {
+    attrs: {id: 'editor'}
+  },
+  children: [
+    {
+      tag: 'input',
+      data: {
+        directives: [{name: 'model', rawName: 'v-model', value: 'input', expression:'input'}]
+      },
+      ...others
+    },
+    {
+      tag: undefined,
+      data: undefined,
+      children: undefined,
+      text: '↵      input↵    ',
+      ...others
+    }
+  ],
+  ...others
+}
+```
+
+至此，我们已经通过 `render` 函数和 `vm` 实例的数据生成了 `vnode`，要注意的是，`render` 函数是在初始化生成的，是不会变的，但是我们的数据层是会变的，每次调用 `_render` 都有可能生成不同的 `vnode`
 
 [simplehtmlparser]:http://erik.eae.net/simplehtmlparser/simplehtmlparser.js
 [createElement]:https://cn.vuejs.org/v2/guide/render-function.html#createElement-%E5%8F%82%E6%95%B0
+[vnode]:https://github.com/vuejs/vue/blob/dev/src/core/vdom/vnode.js
