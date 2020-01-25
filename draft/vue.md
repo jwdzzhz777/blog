@@ -818,7 +818,7 @@ function genData (el: ASTElement, state: CodegenState): string {
 
 `createElement` 有三个参数，第一个参数是 `html` 的标签名字，直接通过 `element.tag` 得到(`parse` 解析取得)。第二个参数是一个数据对象，其值通过 `genData` 方法处理（普通属性、dom属性、style、class、事件等等），第三个参数是子虚拟节点的集合，其也由 `createElement` 构建而成，在 `genElement` 中循环处理 `element.children`。
 
-最终 `generate` 会将 `ast` 包装成类似 `with(this){return _c(...)}` 的字符串，还是上面的例子，最终会输出这样：
+最终 `generate` 会将 `ast` 包装成类似 `with(this){return _c(...)}` 的字符串，还是上面的<a href='#examples'>例子</a>，最终会输出这样：
 
 ```js
 const render = `with(this){return _c('div',{attrs:{"id":"editor"}},[_c('input',{directives:[{name:"model",rawName:"v-model",value:(input),expression:"input"}],domProps:{"value":(input)},on:{"input":function($event){if($event.target.composing)return;input=$event.target.value}}}),_v("\n      "+_s(_f("nothing")(input))+"\n    ")])}`
@@ -830,7 +830,7 @@ const render = `with(this){return _c('div',{attrs:{"id":"editor"}},[_c('input',{
 vm.options.render = new Function(code);
 ```
 
-还是之前的<a href='#example'>例子</a>，其结果大概是这样：
+还是之前的<a href='#examples'>例子</a>，其结果大概是这样：
 
 ```js
 vm.options.render = function() {
@@ -998,7 +998,7 @@ class VNode {
 }
 ```
 
-`vnode` 构造函数主要接收的就是 `createElemetn` 的参数，其本质也是生成一个结构对象，不过和 `ast` 不同的是，`ast` 保留了表达式，而 `vnode` 是将表达式执行完的结果，他是静态的，也就是说与之对应的是一个确定的渲染结果。依旧是那个例子：
+`vnode` 构造函数主要接收的就是 `createElemetn` 的参数，其本质也是生成一个结构对象，不过和 `ast` 不同的是，`ast` 保留了表达式，而 `vnode` 是将表达式执行完的结果，他是静态的，也就是说与之对应的是一个确定的渲染结果。依旧是那个<a href='#examples'>例子</a>：
 
 ```js
 const vnode = {
