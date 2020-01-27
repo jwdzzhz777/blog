@@ -1026,8 +1026,81 @@ const vnode = {
 }
 ```
 
-至此，我们已经通过 `render` 函数和 `vm` 实例的数据生成了 `vnode`，要注意的是，`render` 函数是在初始化生成的，是不会变的，但是我们的数据层是会变的，每次调用 `_render` 都有可能生成不同的 `vnode`
+至此，我们已经通过 `render` 函数和 `vm` 实例的数据生成了 `vnode`，要注意的是，`render` 函数是在初始化生成的，是不会变的，但是我们的数据层是会变的，每次调用 `_render` 都有可能生成不同的 `vnode`，接着就可以通过 `vnode` 去生成真正的 `dom` 节点了。
 
+### patch
+
+生成 `vnode` 之后就是将其传入 `_update`，其内部本质就是调用 `patch` 方法，代码在 `core/vdom/patch`，我们来大致看一下：
+
+```js
+function patch(oldVnode, vnode, hydrating, insertedVnodeQueue) {
+  if (isUndef(oldVnode)) createElm(vnode, insertedVnodeQueue);
+  else {
+    const isRealElement = isDef(oldVnode.nodeType)
+      if (!isRealElement && sameVnode(oldVnode, vnode)) {
+        // patch existing root node
+        patchVnode(oldVnode, vnode, insertedVnodeQueue, null, null, removeOnly)
+      } else {
+        if (isRealElement) {
+          // mounting to a real element
+          // check if this is server-rendered content and if we can perform
+          // a successful hydration.
+          if (oldVnode.nodeType === 1 && oldVnode.hasAttribute(SSR_ATTR)) {
+            oldVnode.removeAttribute(SSR_ATTR)
+            hydrating = true
+          }
+          if (isTrue(hydrating) && hydrate(oldVnode, vnode, insertedVnodeQueue)) {
+            invokeInsertHook(vnode, insertedVnodeQueue, true)
+            return oldVnode
+          }
+          // either not server-rendered, or hydration failed.
+          // create an empty node and replace it
+          oldVnode = emptyNodeAt(oldVnode)
+        }
+        // create new node
+        createElm(vnode, insertedVnodeQueue)
+      }
+  }
+}
+```
+
+我们一步步来，`patch` 方法接收两个参数 `vnode` 就是我们新生成的虚拟DOM, 而 `oldVnode` 是上一个状态的 `DOM element` 对象，它也可以是初始化时的 `el` 指向的元素：
+
+```js
+<div id="app"></div>
+
+new Vue({
+  el: '#app',
+  ...
+})
+```
+
+比如这个时候 `oldVnode` 就是 `<div id="app"></div>`。所以哪怕是初始化的时候 `oldVnode` 也是存在的。
+
+接着看方法体，首先是判断 `oldVnode` 是否存在，比如操作对象是 `Component` 时他就是空的，这个时候要创建一个新的根元素 `createElm(vnode)`。
+
+如果 `oldVnode` 不为空，先拿到 `oldVnode.nodeType`。注意，`oldVnode` 他可能是真实的 `DOM element` 对象，也有可能是个虚拟DOM `vnode`,这里的 [nodeType][nodeType] 是 `DOM element` 的属性，当它值为 1 时代表它是个元素 (`element`)，我们通过 `nodeType` 来判断 `oldVnode` 是虚拟DOM 还是 真实DOM，也就是 `isRealElement`。
+
+当 `oldVnode` 是虚拟DOM，且新旧虚拟DOM相同时（`!isRealElement && sameVnode(oldVnode, vnode)`）调用 `patchVnode(oldVnode, vnode)`，一般来讲第一次渲染时 `oldVnode` 是真实DOM，更新节点时 `oldVnode` 是虚拟DOM。
+
+当 `oldVnode` 是真实DOM时，说明是第一次调用，则需要判断一个特殊情况： `hydrating` 是否为 `true`，`hydrating` 是一个是否保持的标记，他的作用是是否沿用 `oldVnode`。比如说服务端渲染的情况，我们第一次 `patch` 时 `oldVnode` 已经是渲染好了的真实DOM了，此时我们要做的就是存一下真实DOM(`oldVnode`)即可。实际调用 `hydrate` 方法。
+
+剩下的就是 `oldVnode` 是真实DOM、`hydrating === false` 和 `oldVnode` 是虚拟DOM、`!sameVnode(oldVnode, vnode)`
+两种情况，这两种情况直接用新的替换老的 (`createElm(vnode)`)。
+
+>note: 这里的 `sameVnode` 不是 diff !! 它只是确认根节点是否被替换了。
+
+ok，各种情况我们总结完了，我们来一一细看，
+
+// TODO:
+
+`createElm`
+
+components
+
+`hydrate`
+ 
 [simplehtmlparser]:http://erik.eae.net/simplehtmlparser/simplehtmlparser.js
 [createElement]:https://cn.vuejs.org/v2/guide/render-function.html#createElement-%E5%8F%82%E6%95%B0
 [vnode]:https://github.com/vuejs/vue/blob/dev/src/core/vdom/vnode.js
+[nodeType]:https://www.w3school.com.cn/jsref/prop_node_nodetype.asp
