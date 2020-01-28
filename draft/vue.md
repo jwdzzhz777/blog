@@ -1057,10 +1057,15 @@ function patch(oldVnode, vnode, hydrating, insertedVnodeQueue) {
           // create an empty node and replace it
           oldVnode = emptyNodeAt(oldVnode)
         }
+        // replacing existing element
+        const oldElm = oldVnode.elm
+        const parentElm = nodeOps.parentNode(oldElm)
         // create new node
-        createElm(vnode, insertedVnodeQueue)
+        createElm(vnode, insertedVnodeQueue, parentElm)
       }
   }
+
+  invokeInsertHook()
 }
 ```
 
@@ -1077,24 +1082,114 @@ new Vue({
 
 比如这个时候 `oldVnode` 就是 `<div id="app"></div>`。所以哪怕是初始化的时候 `oldVnode` 也是存在的。
 
-接着看方法体，首先是判断 `oldVnode` 是否存在，比如操作对象是 `Component` 时他就是空的，这个时候要创建一个新的根元素 `createElm(vnode)`。
+接着看方法体，有下面几种情况：
 
-如果 `oldVnode` 不为空，先拿到 `oldVnode.nodeType`。注意，`oldVnode` 他可能是真实的 `DOM element` 对象，也有可能是个虚拟DOM `vnode`,这里的 [nodeType][nodeType] 是 `DOM element` 的属性，当它值为 1 时代表它是个元素 (`element`)，我们通过 `nodeType` 来判断 `oldVnode` 是虚拟DOM 还是 真实DOM，也就是 `isRealElement`。
+1. 首先是判断 `oldVnode` 是否存在，比如操作对象是 `Component` 时他就是空的，这个时候要创建一个新的根元素 `createElm(vnode)`。
 
-当 `oldVnode` 是虚拟DOM，且新旧虚拟DOM相同时（`!isRealElement && sameVnode(oldVnode, vnode)`）调用 `patchVnode(oldVnode, vnode)`，一般来讲第一次渲染时 `oldVnode` 是真实DOM，更新节点时 `oldVnode` 是虚拟DOM。
+2. 如果 `oldVnode` 不为空，先拿到 `oldVnode.nodeType`。注意，`oldVnode` 他可能是真实的 `DOM element` 对象，也有可能是个虚拟DOM `vnode`,这里的 [nodeType][nodeType] 是 `DOM element` 的属性，当它值为 1 时代表它是个元素 (`element`)，我们通过 `nodeType` 来判断 `oldVnode` 是虚拟DOM 还是 真实DOM，也就是 `isRealElement`。
 
-当 `oldVnode` 是真实DOM时，说明是第一次调用，则需要判断一个特殊情况： `hydrating` 是否为 `true`，`hydrating` 是一个是否保持的标记，他的作用是是否沿用 `oldVnode`。比如说服务端渲染的情况，我们第一次 `patch` 时 `oldVnode` 已经是渲染好了的真实DOM了，此时我们要做的就是存一下真实DOM(`oldVnode`)即可。实际调用 `hydrate` 方法。
+3. 当 `oldVnode` 是虚拟DOM，且新旧虚拟DOM相同时（`!isRealElement && sameVnode(oldVnode, vnode)`）调用 `patchVnode(oldVnode, vnode)`，一般来讲第一次渲染时 `oldVnode` 是真实DOM，更新节点时 `oldVnode` 是虚拟DOM。
 
-剩下的就是 `oldVnode` 是真实DOM、`hydrating === false` 和 `oldVnode` 是虚拟DOM、`!sameVnode(oldVnode, vnode)`
+4. 当 `oldVnode` 是真实DOM时，说明是第一次调用，则需要判断一个特殊情况： `hydrating` 是否为 `true`，`hydrating` 是一个是否保持的标记，他的作用是是否沿用 `oldVnode`。比如说服务端渲染的情况，我们第一次 `patch` 时 `oldVnode` 已经是渲染好了的真实DOM了，此时我们要做的就是存一下真实DOM(`oldVnode`)即可。实际调用 `hydrate` 方法。
+
+5. 剩下的就是 `oldVnode` 是真实DOM、`hydrating === false` 和 `oldVnode` 是虚拟DOM、`!sameVnode(oldVnode, vnode)`
 两种情况，这两种情况直接用新的替换老的 (`createElm(vnode)`)。
 
 >note: 这里的 `sameVnode` 不是 diff !! 它只是确认根节点是否被替换了。
 
-ok，各种情况我们总结完了，我们来一一细看，
+ok，各种情况我们总结完了，我们来一一细看。
+
+#### `createElm`
+
+当处于上述情况 1 和 5 时，会调用 `createElm` 方法，该方法的作用是将虚拟DOM 转换为真实DOM 并替换当前的真实DOM(`oldVnode`)
+
+```js
+function createElm(
+  vnode,
+  insertedVnodeQueue,
+  parentElm,
+  refElm,
+  nested,
+  ownerArray,
+  index
+) {
+  // 递归调用 处理 children 时 vnode 指向正确的 child (ownerArray[index])
+  if (isDef(vnode.elm) && isDef(ownerArray)) {
+    // This vnode was used in a previous render!
+    // now it's used as a new node, overwriting its elm would cause
+    // potential patch errors down the road when it's used as an insertion
+    // reference node. Instead, we clone the node on-demand before creating
+    // associated DOM element for it.
+    vnode = ownerArray[index] = cloneVNode(vnode)
+  }
+  // 处理 Component
+  if (createComponent(vnode, insertedVnodeQueue, parentElm, refElm)) {
+    return
+  }
+  const data = vnode.data
+  const children = vnode.children
+  const tag = vnode.tag
+
+  if (tag) {
+    vnode.elm = document.createElement(tag)
+    // style 的 scope 相关
+    setScope(vnode)
+
+    createChildren(vnode, children, insertedVnodeQueue)
+    if (data) {
+      invokeCreateHooks(vnode, insertedVnodeQueue)
+    }
+    insert(parentElm, vnode.elm, refElm)
+  }
+}
+
+function createChildren (vnode, children, insertedVnodeQueue) {
+  if (Array.isArray(children)) {
+    for (let i = 0; i < children.length; ++i) {
+      createElm(children[i], insertedVnodeQueue, vnode.elm, null, true, children, i)
+    }
+  } else if (isPrimitive(vnode.text)) {
+    // 不是数组直接 document.appendChild 到父元素上。
+    nodeOps.appendChild(vnode.elm, nodeOps.createTextNode(String(vnode.text)))
+  }
+}
+
+function invokeCreateHooks() {
+  for (let i = 0; i < cbs.create.length; ++i) {
+    cbs.create[i](emptyNode, vnode)
+  }
+  i = vnode.data.hook // Reuse variable
+  if (isDef(i)) {
+    if (isDef(i.create)) i.create(emptyNode, vnode)
+    if (isDef(i.insert)) insertedVnodeQueue.push(vnode)
+  }
+}
+```
+
+`createComponent`： 处理当前是组件的情况，这个我们稍后再讲。
+
+`document.createElement(tag)` 生成一个元素，然后赋值到 `vnode.elm`，此时元素只是一个空壳，什么都没有。
+
+`setScope` 方法是用来处理样式的 `scope` 属性。
+
+`createChildren` 用来递归调用 `createElm` 处理 `children`,`createElm` 的参数 `parentElm` 指的是父元素，`ownerArray[index]` 为当前子 `vnode`。
+
+`invokeCreateHooks` 是用来方法处理 `data` 的，其中 `cbs` 存放这一组 `hooks`: `['create', 'activate', 'update', 'remove', 'destroy']` 每个 `hooks` 中存放这一组方法，这些方法用与在不同周期处理 `data` 数据，其代码在 `core/vdom/modules` 和 `platforms/xxx/runtime/modules` 中，这里就不展开了，主要是处理 `class`、`attrs`、`events`、`props` 等属性，并合并到 `vnode.elm` 上。而 `vnode.data.hook` 和 `component` 相关，稍后讲。
+
+`insert` 方法就是将全部处理好的元素子元素 `vnode.elm` 放到父元素的内部 `document.appendChild(parent, vnode.elm)` 。注意这里都是真实的 DOM 操作，如果处理的是根节点，操作的 `parentElm` 是页面上的真实DOM。比如情况 5:
+
+```js
+// replacing existing element
+const oldElm = oldVnode.elm
+const parentElm = nodeOps.parentNode(oldElm)
+// create new node
+createElm(vnode, insertedVnodeQueue, parentElm)
+```
+
+这种情况就直接将当前元素整个替换。
+
 
 // TODO:
-
-`createElm`
 
 components
 
