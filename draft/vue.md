@@ -1188,10 +1188,101 @@ createElm(vnode, insertedVnodeQueue, parentElm)
 
 这种情况就直接将当前元素整个替换。
 
+#### createComponent
 
-// TODO:
+之前有提到，在 `_render` 时会处理 `Component`，当时只是处理组件对象，将其继承 `Vue` 实例的属性，生成 `vnode`，其实此时还会在组件对象的 `data` 上绑定一些 `hooks` :
 
-components
+```js
+// inline hooks to be invoked on component VNodes during patch
+const componentVNodeHooks = {
+  init (vnode: VNodeWithData, hydrating: boolean): ?boolean {
+    if (
+      vnode.componentInstance &&
+      !vnode.componentInstance._isDestroyed &&
+      vnode.data.keepAlive
+    ) {
+      // kept-alive components, treat as a patch
+      const mountedNode: any = vnode // work around flow
+      componentVNodeHooks.prepatch(mountedNode, mountedNode)
+    } else {
+      const child = vnode.componentInstance = createComponentInstanceForVnode(
+        vnode,
+        activeInstance
+      )
+      child.$mount(hydrating ? vnode.elm : undefined, hydrating)
+    }
+  },
+  prepatch() {...},
+  insert() {...},
+  destroy() {...}
+}
+
+const hooksToMerge = Object.keys(componentVNodeHooks)
+
+function installComponentHooks(data) {
+  const hooks = data.hook || (data.hook = {})
+  for (let i = 0; i < hooksToMerge.length; i++) {
+    const key = hooksToMerge[i]
+    const existing = hooks[key]
+    const toMerge = componentVNodeHooks[key]
+    if (existing !== toMerge && !(existing && existing._merged)) {
+      hooks[key] = existing ? mergeHook(toMerge, existing) : toMerge
+    }
+  }
+}
+```
+
+这些 `hooks` 封装了组件的添加和销毁方法，我们就只看 `init`，这里的 `Vnode` 是组件vnode，其对象本身在 `vnode.componentOptions.Ctor` 中，是继承得到的构造方法，这里 `createComponentInstanceForVnode` 实际就是 `new Ctor()` 得到实例，这里会调用 `_init` 方法不过因为组件没有 `$el` 字段，所以不会调用 `$moumt` 方法，所以 `init hook` 手动调用了 `$moumt`。也就是 `init hook` 封装了组件的初始化操作，并将实例放到了 `vnode.componentInstance` 中。
+
+ok，了解了这个 我们再来看 `patch` 中的 `createComponent`:
+
+```js
+function createComponent (vnode, insertedVnodeQueue, parentElm, refElm) {
+  let i = vnode.data
+  if (isDef(i)) {
+    const isReactivated = isDef(vnode.componentInstance) && i.keepAlive
+    if (isDef(i = i.hook) && isDef(i = i.init)) {
+      i(vnode, false /* hydrating */)
+    }
+    // after calling the init hook, if the vnode is a child component
+    // it should've created a child instance and mounted it. the child
+    // component also has set the placeholder vnode's elm.
+    // in that case we can just return the element and be done.
+    if (isDef(vnode.componentInstance)) {
+      initComponent(vnode, insertedVnodeQueue)
+      insert(parentElm, vnode.elm, refElm)
+      if (isTrue(isReactivated)) {
+        reactivateComponent(vnode, insertedVnodeQueue, parentElm, refElm)
+      }
+      return true
+    }
+  }
+}
+
+function initComponent (vnode, insertedVnodeQueue) {
+  if (isDef(vnode.data.pendingInsert)) {
+    insertedVnodeQueue.push.apply(insertedVnodeQueue, vnode.data.pendingInsert)
+    vnode.data.pendingInsert = null
+  }
+  vnode.elm = vnode.componentInstance.$el
+  if (isPatchable(vnode)) {
+    invokeCreateHooks(vnode, insertedVnodeQueue)
+    setScope(vnode)
+  } else {
+    // empty component root.
+    // skip all element-related modules except for ref (#3455)
+    registerRef(vnode)
+    // make sure to invoke the insert hook
+    insertedVnodeQueue.push(vnode)
+  }
+}
+```
+
+`createComponent` 方法就是直接调用 `component` 的 `create hook`，生成实例存在 `vnode.componentInstance` 中，如果成功，就调用 `initComponent`，并插入父元素中 `insert(parentElm, vnode.elm, refElm)`。
+
+值得注意的是 `create hook` 只是负责组件内部的初始化，而组件使用的地方依旧需要处理当作一个元素处理，即 `initComponent` 中除了将生成的组件实例的真实dom绑定在 `vnode.elm`，依旧调用了 `invokeCreateHooks` 来处理打他，比如需要传入的 `dom props`。
+
+还有，想象以下，有组件时 `patch` 方法会执行两次，页面执行一次，组件内部执行一次（init hook `$mount`），而组件内部执行 `patch` 是没有 `oldVnode` 的，也就是说组件本身生成的 `element` 仅仅是存在组件的 `vnode.$el` 中，最后通过 `vnode.elm = vnode.componentInstance.$el` 的方法拿到，然后 `insert` 到父元素中去。
 
 `hydrate`
  
