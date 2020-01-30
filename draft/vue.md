@@ -1284,8 +1284,90 @@ function initComponent (vnode, insertedVnodeQueue) {
 
 还有，想象以下，有组件时 `patch` 方法会执行两次，页面执行一次，组件内部执行一次（init hook `$mount`），而组件内部执行 `patch` 是没有 `oldVnode` 的，也就是说组件本身生成的 `element` 仅仅是存在组件的 `vnode.$el` 中，最后通过 `vnode.elm = vnode.componentInstance.$el` 的方法拿到，然后 `insert` 到父元素中去。
 
-`hydrate`
- 
+#### `hydrate`
+
+调用 `$mount` 时会传入一个标记 `hydrating`，并一直拓传到 `patch` 方法，当 `oldVnode` 是真实dom时，它决定是否沿用真实dom。一个很好的例子就是 `SSR` 服务端渲染，初次调用 `$mount` 时页面已经渲染好了，`oldVnode` 就是渲染好的元素节点，此时 `Vue` 就会调用 `hydrate` 方法
+
+```js
+// in patch function
+if (isTrue(hydrating)) {
+  if (hydrate(oldVnode, vnode, insertedVnodeQueue)) {
+    return oldVnode
+  }
+}
+```
+
+`hydrate` 会处理 `vnode` 并返回一个 `boolean`，如果为true，`patch` 就直接返回 `oldVnode`，我们来看看里面做了哪些处理：
+
+```js
+function hydrate (elm, vnode, insertedVnodeQueue) {
+    let i
+    const { tag, data, children } = vnode
+    vnode.elm = elm
+
+    if (isDef(data)) {
+      if (isDef(i = data.hook) && isDef(i = i.init)) i(vnode, true /* hydrating */)
+      if (isDef(i = vnode.componentInstance)) {
+        // child component. it should have hydrated its own tree.
+        initComponent(vnode, insertedVnodeQueue)
+        return true
+      }
+    }
+    if (isDef(tag)) {
+      if (isDef(children)) {
+        // empty element, allow client to pick up and populate children
+        if (!elm.hasChildNodes()) {
+          createChildren(vnode, children, insertedVnodeQueue)
+        } else {
+          // v-html and domProps: innerHTML
+          if (isDef(i = data) && isDef(i = i.domProps) && isDef(i = i.innerHTML)) {
+            if (i !== elm.innerHTML) return false
+          } else {
+            // iterate and compare children lists
+            let childrenMatch = true
+            let childNode = elm.firstChild
+            for (let i = 0; i < children.length; i++) {
+              if (!childNode || !hydrate(childNode, children[i], insertedVnodeQueue, inVPre)) {
+                childrenMatch = false
+                break
+              }
+              childNode = childNode.nextSibling
+            }
+            // if childNode is not null, it means the actual childNodes list is
+            // longer than the virtual children list.
+            if (!childrenMatch || childNode) return false
+          }
+        }
+      }
+      if (isDef(data)) {
+        let fullInvoke = false
+        for (const key in data) {
+          if (!isRenderedModule(key)) {
+            fullInvoke = true
+            invokeCreateHooks(vnode, insertedVnodeQueue)
+            break
+          }
+        }
+        if (!fullInvoke && data['class']) {
+          // ensure collecting deps for deep class bindings for future updates
+          traverse(data['class'])
+        }
+      }
+    } else if (elm.data !== vnode.text) {
+      elm.data = vnode.text
+    }
+    return true
+  }
+```
+
+首先是组件，我们之前讲过，真正的组件初始化在 `patch` 方法中，现在虽然我们的页面已经渲染完了，但 `vnode` 中并没有组件的实例`componentInstance` 所以我们需要生成它，调用 `data.hook.init` 方法生成，然后调用 `initComponent` 绑定 elm，注意这里调用时传入了 `hydrating = true` (`i(vnode, true)`) 那么 `init hook` 内部调用 `$mount` 时也会带入 `hydrating`, 保证组件只初始化，不操作dom。
+
+然后是在 `render` 函数有 `children` 的情况下如果页面元素没有子元素（`!elm.hasChildNodes()`）,这种情况调用 `createChildren` ，循环添加子元素到当前元素中 (`createElm`)。还有个特殊情况就是 `innerHTML`，如果当前元素的 `innerHTML` 和 `vnode.data.domProps.innerHTML` 就会直接返回 false，执行之前的替换流程。
+
+再然后是 `isRenderedModule(key)`，我们知道 `invokeCreateHooks` 会处理 `data` 将各种标签属性添加到元素中，还会处理 `props` 和 `event`，但是当页面已经渲染完成时，有些属性不需要再处理了，所以这个 `isRenderedModule` 维护了一个数组 `attrs,class,staticClass,staticStyle,key` 如果 `data` 中没有除这些之外的属性，那么就跳过 `invokeCreateHooks` 毕竟这是多余的操作，但是遇到其他的还是要正常处理，比如 `event`，服务端只会传html 过来，并不会自己处理事件。
+
+最终处理完之后返回 `true`，将 `oldVnode` 绑定在 `vnode.elm` 上，`patch` 直接返回 `vnode`。这样这个 `vnode` 就会绑定在 `vm.$el` 上。保证下次更新时 `oldVnode` 拿到的是这个我们处理好的 `vnode`。
+  
 [simplehtmlparser]:http://erik.eae.net/simplehtmlparser/simplehtmlparser.js
 [createElement]:https://cn.vuejs.org/v2/guide/render-function.html#createElement-%E5%8F%82%E6%95%B0
 [vnode]:https://github.com/vuejs/vue/blob/dev/src/core/vdom/vnode.js
