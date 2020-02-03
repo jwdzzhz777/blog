@@ -1049,10 +1049,7 @@ function patch(oldVnode, vnode, hydrating, insertedVnodeQueue) {
             oldVnode.removeAttribute(SSR_ATTR)
             hydrating = true
           }
-          if (isTrue(hydrating) && hydrate(oldVnode, vnode, insertedVnodeQueue)) {
-            invokeInsertHook(vnode, insertedVnodeQueue, true)
-            return oldVnode
-          }
+          if (isTrue(hydrating) && hydrate(oldVnode, vnode, insertedVnodeQueue)) return oldVnode
           // either not server-rendered, or hydration failed.
           // create an empty node and replace it
           oldVnode = emptyNodeAt(oldVnode)
@@ -1064,8 +1061,6 @@ function patch(oldVnode, vnode, hydrating, insertedVnodeQueue) {
         createElm(vnode, insertedVnodeQueue, parentElm)
       }
   }
-
-  invokeInsertHook()
 }
 ```
 
@@ -1367,7 +1362,117 @@ function hydrate (elm, vnode, insertedVnodeQueue) {
 再然后是 `isRenderedModule(key)`，我们知道 `invokeCreateHooks` 会处理 `data` 将各种标签属性添加到元素中，还会处理 `props` 和 `event`，但是当页面已经渲染完成时，有些属性不需要再处理了，所以这个 `isRenderedModule` 维护了一个数组 `attrs,class,staticClass,staticStyle,key` 如果 `data` 中没有除这些之外的属性，那么就跳过 `invokeCreateHooks` 毕竟这是多余的操作，但是遇到其他的还是要正常处理，比如 `event`，服务端只会传html 过来，并不会自己处理事件。
 
 最终处理完之后返回 `true`，将 `oldVnode` 绑定在 `vnode.elm` 上，`patch` 直接返回 `vnode`。这样这个 `vnode` 就会绑定在 `vm.$el` 上。保证下次更新时 `oldVnode` 拿到的是这个我们处理好的 `vnode`。
-  
+
+#### patchVnode
+
+之前讲的都是替换的情况，最后就是更新的情况，当 `oldVnode` 不是真实dom 且节点没有替换时，调用 `patchVnode` 。
+
+```js
+if (!isRealElement && sameVnode(oldVnode, vnode)) {
+  // patch existing root node
+  patchVnode(oldVnode, vnode, insertedVnodeQueue, null, null, removeOnly)
+}
+```
+
+我们先来看看 `sameVnode` 方法：
+
+```js
+function sameVnode (a, b) {
+  return (
+    a.key === b.key && (
+      (
+        a.tag === b.tag &&
+        a.isComment === b.isComment &&
+        isDef(a.data) === isDef(b.data) &&
+        sameInputType(a, b)
+      ) || (
+        isTrue(a.isAsyncPlaceholder) &&
+        a.asyncFactory === b.asyncFactory &&
+        isUndef(b.asyncFactory.error)
+      )
+    )
+  )
+}
+
+function sameInputType (a, b) {
+  if (a.tag !== 'input') return true
+  let i
+  const typeA = isDef(i = a.data) && isDef(i = i.attrs) && i.type
+  const typeB = isDef(i = b.data) && isDef(i = i.attrs) && i.type
+  return typeA === typeB || isTextInputType(typeA) && isTextInputType(typeB)
+}
+```
+
+该方法主要判断两个 `vnode` 的 `key`、`tag`、`isComment` 这些字段值是否一样（可以都为 undefined）,`data` 字段是否都 存在/不存在，如果 `tag` 为 `input`，其 `type` 也要相等。
+只要上述情况满足就会被认定为 `sameNode`,它不管你 `data` 是否相等(哪怕 `data` 中事件、样式等等都不一样)，也不管你 `children` 如何。`sameNode` 不是指同一个元素，而是相似，也就是可复用。之后就会对两个相似的 `vnode` 调用 `patchVnode` 方法。
+
+```js
+function patchVnode (
+    oldVnode,
+    vnode
+  ) {
+    // 如果指向同一个对象，直接 return 就好了
+    if (oldVnode === vnode) return
+
+    const elm = vnode.elm = oldVnode.elm
+
+    // reuse element for static trees.
+    // note we only do this if the vnode is cloned -
+    // if the new node is not cloned it means the render functions have been
+    // reset by the hot-reload-api and we need to do a proper re-render.
+    if (isTrue(vnode.isStatic) &&
+      isTrue(oldVnode.isStatic) &&
+      vnode.key === oldVnode.key &&
+      (isTrue(vnode.isCloned) || isTrue(vnode.isOnce))
+    ) {
+      vnode.componentInstance = oldVnode.componentInstance
+      return
+    }
+
+    let i
+    const data = vnode.data
+    // 处理 components
+    if (isDef(data) && isDef(i = data.hook) && isDef(i = i.prepatch)) {
+      i(oldVnode, vnode)
+    }
+
+    const oldCh = oldVnode.children
+    const ch = vnode.children
+    // 处理data
+    if (isDef(data) && isPatchable(vnode)) {
+      for (i = 0; i < cbs.update.length; ++i) cbs.update[i](oldVnode, vnode)
+      if (isDef(i = data.hook) && isDef(i = i.update)) i(oldVnode, vnode)
+    }
+    // 处理 children
+    if (isUndef(vnode.text)) {
+      if (isDef(oldCh) && isDef(ch)) {
+        if (oldCh !== ch) updateChildren(elm, oldCh, ch, insertedVnodeQueue, removeOnly)
+      } else if (isDef(ch)) {
+        if (isDef(oldVnode.text)) nodeOps.setTextContent(elm, '')
+        addVnodes(elm, null, ch, 0, ch.length - 1, insertedVnodeQueue)
+      } else if (isDef(oldCh)) {
+        removeVnodes(oldCh, 0, oldCh.length - 1)
+      } else if (isDef(oldVnode.text)) {
+        nodeOps.setTextContent(elm, '')
+      }
+    } else if (oldVnode.text !== vnode.text) {
+      nodeOps.setTextContent(elm, vnode.text)
+    }
+  }
+```
+
+一步一步来，首先拿到 `oldVnode.elm` 也就是真实的dom元素，而且赋值给 `vnode.elm`,紧接着是静态节点优化，这里提一下，在 `ast` 转 `render` 函数之间，有一步静态节点优化 `optimize(ast)`，前面省略了，如果当前节点没有任何动态的元素，就会添加一个静态标记 `isStatic`，在此时，遇到这个标记就直接 return，复用之间的元素（如果是组件就会复用组件实例 `vnode.componentInstance = oldVnode.componentInstance`）。
+
+接着,拿到 `data` (`const data = vnode.data`), 如果当前节点是组件节点，调用组件的 `prepatch hook`，该 `hook` 的作用是处理组件实例，更新属性，并需要的话调用组件更新方法 `$forceUpdate` 也就是 `_update(_render())`。接着处理 `data` 只要 `data` 存在（`isPatchable` 主要就是判断 vnode/组件实例有没有 `tag` 字段）即调用 `update hooks` 处理，大部分和 `create hooks` 处理一样，处理属性、样式、事件
+
+最后是处理 `children`, 拿到新老 `vnode` 的 `children`，如果 `vnode` 有 `text` 字段，且与 `oldVnode.text` 不同则直接将 当前 `dom element` 的 `textContext` 设为 `vnode.text` （`nodeOps.setTextContent(elm, vnode.text)`）。 `text` 的优先级要大于 `children`。抛去 `text` 的特殊情况则有三种情况，`oldCh` 和 `ch` 同时存在，则调用 `updateChildren` 进一步处理，如果 `ch` 存在 `oldCh` 不存在，则调用 `addVnodes` 处理 `children` 并直接插入当前dom 元素(就是循环对子 `vnode` 调用 `createElm`)，如果 `oldCh` 存在而 `ch` 不存在则调用 `removeVnodes` 将其子节点从元素中删除。
+
+简单的说，只要新老 `vnode` 相似，抛去特殊情况，就会拿到旧元素复用，在旧元素上处理 `data`，也就是说 `sameNode` 判定很简单，而复用也只是简单的复用了dom 元素的壳，其属性还是要处理过，而且只有相似的节点才回去深入比较其 `children`。
+
+#### updateChildren (diff)
+
+
+
 [simplehtmlparser]:http://erik.eae.net/simplehtmlparser/simplehtmlparser.js
 [createElement]:https://cn.vuejs.org/v2/guide/render-function.html#createElement-%E5%8F%82%E6%95%B0
 [vnode]:https://github.com/vuejs/vue/blob/dev/src/core/vdom/vnode.js
