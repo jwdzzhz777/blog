@@ -1467,11 +1467,319 @@ function patchVnode (
 
 最后是处理 `children`, 拿到新老 `vnode` 的 `children`，如果 `vnode` 有 `text` 字段，且与 `oldVnode.text` 不同则直接将 当前 `dom element` 的 `textContext` 设为 `vnode.text` （`nodeOps.setTextContent(elm, vnode.text)`）。 `text` 的优先级要大于 `children`。抛去 `text` 的特殊情况则有三种情况，`oldCh` 和 `ch` 同时存在，则调用 `updateChildren` 进一步处理，如果 `ch` 存在 `oldCh` 不存在，则调用 `addVnodes` 处理 `children` 并直接插入当前dom 元素(就是循环对子 `vnode` 调用 `createElm`)，如果 `oldCh` 存在而 `ch` 不存在则调用 `removeVnodes` 将其子节点从元素中删除。
 
-简单的说，只要新老 `vnode` 相似，抛去特殊情况，就会拿到旧元素复用，在旧元素上处理 `data`，也就是说 `sameNode` 判定很简单，而复用也只是简单的复用了dom 元素的壳，其属性还是要处理过，而且只有相似的节点才回去深入比较其 `children`。
+简单的说，只要新老 `vnode` 相似，抛去特殊情况，就会拿到旧元素复用，在旧元素上处理 `data`，也就是说 `sameNode` 判定很简单，而复用也只是简单的复用了dom 元素的壳，其属性还是要处理过，而且只有相似的节点才回去深入比较其 `children`。接着我们看下如何处理 `children`:
 
-#### updateChildren (diff)
+#### updateChildren
 
+与 `patchVnode` 不同的是，`updateChildren` 对比的是两个新/老 `vnode` 数组，老数组中任意元素都有可能被新元素复用：
 
+```js
+function updateChildren (parentElm, oldCh, newCh, insertedVnodeQueue) {
+    let oldStartIdx = 0
+    let newStartIdx = 0
+    let oldEndIdx = oldCh.length - 1
+    let oldStartVnode = oldCh[0]
+    let oldEndVnode = oldCh[oldEndIdx]
+    let newEndIdx = newCh.length - 1
+    let newStartVnode = newCh[0]
+    let newEndVnode = newCh[newEndIdx]
+    let oldKeyToIdx, idxInOld, vnodeToMove, refElm
+
+    while (oldStartIdx <= oldEndIdx && newStartIdx <= newEndIdx) {
+      if (isUndef(oldStartVnode)) {
+        oldStartVnode = oldCh[++oldStartIdx] // Vnode has been moved left
+      } else if (isUndef(oldEndVnode)) {
+        oldEndVnode = oldCh[--oldEndIdx]
+      } else if (sameVnode(oldStartVnode, newStartVnode)) {
+        patchVnode(oldStartVnode, newStartVnode, insertedVnodeQueue, newCh, newStartIdx)
+        oldStartVnode = oldCh[++oldStartIdx]
+        newStartVnode = newCh[++newStartIdx]
+      } else if (sameVnode(oldEndVnode, newEndVnode)) {
+        patchVnode(oldEndVnode, newEndVnode, insertedVnodeQueue, newCh, newEndIdx)
+        oldEndVnode = oldCh[--oldEndIdx]
+        newEndVnode = newCh[--newEndIdx]
+      } else if (sameVnode(oldStartVnode, newEndVnode)) { // Vnode moved right
+        patchVnode(oldStartVnode, newEndVnode, insertedVnodeQueue, newCh, newEndIdx)
+        canMove && nodeOps.insertBefore(parentElm, oldStartVnode.elm, nodeOps.nextSibling(oldEndVnode.elm))
+        oldStartVnode = oldCh[++oldStartIdx]
+        newEndVnode = newCh[--newEndIdx]
+      } else if (sameVnode(oldEndVnode, newStartVnode)) { // Vnode moved left
+        patchVnode(oldEndVnode, newStartVnode, insertedVnodeQueue, newCh, newStartIdx)
+        canMove && nodeOps.insertBefore(parentElm, oldEndVnode.elm, oldStartVnode.elm)
+        oldEndVnode = oldCh[--oldEndIdx]
+        newStartVnode = newCh[++newStartIdx]
+      } else {
+        if (isUndef(oldKeyToIdx)) oldKeyToIdx = createKeyToOldIdx(oldCh, oldStartIdx, oldEndIdx)
+        idxInOld = isDef(newStartVnode.key)
+          ? oldKeyToIdx[newStartVnode.key]
+          : findIdxInOld(newStartVnode, oldCh, oldStartIdx, oldEndIdx)
+        if (isUndef(idxInOld)) { // New element
+          createElm(newStartVnode, insertedVnodeQueue, parentElm, oldStartVnode.elm, false, newCh, newStartIdx)
+        } else {
+          vnodeToMove = oldCh[idxInOld]
+          if (sameVnode(vnodeToMove, newStartVnode)) {
+            patchVnode(vnodeToMove, newStartVnode, insertedVnodeQueue, newCh, newStartIdx)
+            oldCh[idxInOld] = undefined
+            canMove && nodeOps.insertBefore(parentElm, vnodeToMove.elm, oldStartVnode.elm)
+          } else {
+            // same key but different element. treat as new element
+            createElm(newStartVnode, insertedVnodeQueue, parentElm, oldStartVnode.elm, false, newCh, newStartIdx)
+          }
+        }
+        newStartVnode = newCh[++newStartIdx]
+      }
+    }
+    if (oldStartIdx > oldEndIdx) {
+      refElm = isUndef(newCh[newEndIdx + 1]) ? null : newCh[newEndIdx + 1].elm
+      addVnodes(parentElm, refElm, newCh, newStartIdx, newEndIdx, insertedVnodeQueue)
+    } else if (newStartIdx > newEndIdx) {
+      removeVnodes(oldCh, oldStartIdx, oldEndIdx)
+    }
+  }
+```
+
+可以看到，`updateChildren` 利用了前后指针法来遍历两个数组 `oldCh` 和 `newCh`，在最一开始分别记录了
+
+* `oldStartIdx`、`newStartIdx` 新/老数组起始指针位置
+* `oldEndIdx`、`newEndIdx` 新/老数组结束指针位置
+* `oldStartVnode`、`newStartVnode` 新老数组起始位置的 `vnode`
+* `oldEndVnode`、`newEndVnode` 新老数组结束位置的 `vnode`
+
+就像这样：分别对应四个 `vnode` 和指针
+
+<table>
+  <tr>
+    <td></td><td>newStartVnode</td>
+    <td></td><td></td><td></td><td>newEndVnode</td>
+  </tr>
+  <tr>
+    <td>ch：</td>
+    <td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">1</div></td>
+    <td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">2</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">3</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">4</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">5</div></td>
+  </tr>
+  <tr>
+    <td>oldch：</td>
+    <td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">1</div></td>
+    <td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">2</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">3</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">4</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">5</div></td>
+  </tr>
+  <tr>
+    <td></td><td>oldStartVnode</td>
+    <td></td><td></td><td></td><td>oldEndVnode</td>
+  </tr>
+</table>
+
+ok，有了这些值就可以开始我们的循环操作了，只要 `oldStartIdx <= oldEndIdx && newStartIdx <= newEndIdx` 新老数组的前后指针之间还有元素存在就一直执行如下判断，有那么几种情况：
+
+1. `oldStartVnode` 不存在，那么老数组的前指针后移，`oldStartVnode` 也指向移动后的 `vnode`：`oldStartVnode = oldCh[++oldStartIdx]`
+2. `oldEndVnode` 不存在，那么老数组的后指针前移，`oldStartVnode` 也指向移动后的 `vnode`：`oldStartVnode = oldCh[++oldStartIdx]`
+
+> note: 后续匹配 `key` 的逻辑中会将 `oldch` 中匹配到的位置置空 `undefined`，防止多次匹配，这里就是处理这种空的情况，直接跳到下一个/前一个
+
+3. `sameVnode(oldStartVnode, newStartVnode)` 也就是新老数组的起始 `vnode` 相似，如此直接调用 `patchVnode`,复用 `oldVnode` 中存的 dom element，在该元素上直接处理 `newVnode`。完事后将新老前指针后移，同时新老 `vnode` 也指向移动后的：
+
+<table>
+  <tr>
+    <td>patch:</td><td>newStartVnode</td>
+    <td></td><td></td><td></td><td></td>
+  </tr>
+  <tr>
+    <td>ch：</td>
+    <td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">1</div></td>
+    <td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">2</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">3</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">4</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">5</div></td>
+  </tr>
+  <tr>
+    <td></td><td>patch sameNode</td>
+  </tr>
+  <tr>
+    <td>oldch：</td>
+    <td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">1</div></td>
+    <td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">2</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">3</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">4</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">5</div></td>
+  </tr>
+  <tr>
+    <td></td><td>oldStartVnode</td>
+    <td></td><td></td><td></td><td></td>
+  </tr>
+</table>
+
+<table>
+  <tr>
+    <td>移动指针</td><td></td>
+    <td>newStartVnode</td><td></td><td></td><td></td>
+  </tr>
+  <tr>
+    <td>ch：</td>
+    <td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">1</div></td>
+    <td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">2</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">3</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">4</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">5</div></td>
+  </tr>
+  <tr>
+    <td>oldch：</td>
+    <td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">1</div></td>
+    <td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">2</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">3</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">4</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">5</div></td>
+  </tr>
+  <tr>
+    <td></td><td></td>
+    <td>oldStartVnode</td><td></td><td></td><td></td>
+  </tr>
+</table>
+
+4. `sameVnode(oldEndVnode, newEndVnode)` 类似的，这个情况是新老数组的后指针 `vnode` 相似，调用 `patchVnode`,复用 `oldVnode` 中存的 dom element 并处理。完事后将新老后指针前移，同时新老 `vnode` 也指向移动后的：
+
+<table>
+  <tr>
+    <td>patch:</td><td></td>
+    <td></td><td></td><td></td><td>newEndVnode</td>
+  </tr>
+  <tr>
+    <td>ch：</td>
+    <td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">1</div></td>
+    <td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">2</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">3</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">4</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">5</div></td>
+  </tr>
+  <tr>
+    <td></td><td></td><td></td><td></td><td></td><td>patch sameNode</td>
+  </tr>
+  <tr>
+    <td>oldch：</td>
+    <td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">1</div></td>
+    <td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">2</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">3</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">4</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">5</div></td>
+  </tr>
+  <tr>
+    <td></td><td></td>
+    <td></td><td></td><td></td><td>oldEndVnode</td>
+  </tr>
+</table>
+
+<table>
+  <tr>
+    <td>移动指针</td><td></td><td></td><td></td><td>newEndVnode</td><td></td>
+  </tr>
+  <tr>
+    <td>ch：</td>
+    <td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">1</div></td>
+    <td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">2</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">3</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">4</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">5</div></td>
+  </tr>
+  <tr>
+    <td>oldch：</td>
+    <td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">1</div></td>
+    <td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">2</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">3</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">4</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">5</div></td>
+  </tr>
+  <tr>
+    <td></td><td></td><td></td><td></td><td>oldEndVnode</td><td></td>
+  </tr>
+</table>
+
+5. `sameVnode(oldStartVnode, newEndVnode)` 也就是‘老前’ 和 ‘新后’ `vnode` 相似，这种情况不仅要进行 `patchVnode` 处理，还需要将真实dom元素移动到正确位置： `parentElm.insertBefore(oldStartVnode.elm, oldEndVnode.elm.nextSibling` 也就是将 `oldStartVnode.elm` 放在 `oldEndVnode.elm` 的后面 (注意不是最后！已经处理好的元素不动，放在还没处理的元素列表的最后)。完事后将 `oldStartIdx` 右移，`newEndIdx` 左移。
+
+<table>
+  <tr>
+    <td>patch:</td><td></td>
+    <td></td><td></td><td></td><td>newEndVnode</td>
+  </tr>
+  <tr>
+    <td>ch：</td>
+    <td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">1</div></td>
+    <td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">2</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">3</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">4</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">5</div></td>
+  </tr>
+  <tr>
+    <td></td><td></td><td></td><td></td><td></td><td>patch sameNode</td>
+  </tr>
+  <tr>
+    <td>oldch：</td>
+    <td></td><td></td><td></td><td></td>
+    <td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">1</div></td>
+    <td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">2</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">3</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">4</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">5</div></td>
+  </tr>
+  <tr>
+    <td></td><td></td>
+    <td></td><td></td><td></td><td>oldStartVnode</td>
+  </tr>
+</table>
+
+<table>
+  <tr>
+    <td>移动指针</td><td></td><td></td><td></td><td>newEndVnode</td><td></td>
+  </tr>
+  <tr>
+    <td>ch：</td>
+    <td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">1</div></td>
+    <td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">2</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">3</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">4</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">5</div></td>
+  </tr>
+  <tr>
+    <td>oldch：</td><td></td><td></td>
+    <td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">1</div></td>
+    <td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">2</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">3</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">4</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">5</div></td>
+  </tr>
+  <tr>
+    <td></td><td></td><td></td><td></td><td>oldStartVnode</td><td></td>
+  </tr>
+</table>
+
+此时真实元素会这样排列：
+
+<table>
+  <tr>
+    <td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">2</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">3</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">4</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">5</div></td>
+    <td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">1</div></td>
+  </tr>
+</table>
+
+6. `sameVnode(oldEndVnode, newStartVnode)` 类似的，这种情况是 ‘新前’ 和 ‘老后’ 相似，同样也是 `patchVnode`，然后将当前元素 `oldEndVnode.elm` 放在未处理元素 `oldStartVnode.elm` 的最前面  `parentElm.insertBefore(oldEndVnode.elm, oldStartVnode.elm)`。完事将 `oldEndIdx` 左移，`newStartIdx` 右移。
+
+> note: 注意 5，6 中所谓的未处理元素列表指的是 `oldStartIdx`和`oldEndIdx` 之间的位置的 `vnode` 所对应的元素。dom 元素移动只在他们之间，处理好的dom元素不会改变
+
+<table>
+  <tr>
+    <td>patch:</td><td></td>
+    <td></td><td></td><td></td><td>newStartVnode</td>
+  </tr>
+  <tr>
+    <td>ch：</td><td></td><td></td><td></td><td></td>
+    <td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">1</div></td>
+    <td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">2</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">3</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">4</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">5</div></td>
+  </tr>
+  <tr>
+    <td></td><td></td><td></td><td></td><td></td><td>patch sameNode</td>
+  </tr>
+  <tr>
+    <td>oldch：</td>
+    <td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">1</div></td>
+    <td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">2</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">3</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">4</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">5</div></td>
+  </tr>
+  <tr>
+    <td></td><td></td>
+    <td></td><td></td><td></td><td>oldEndVnode</td>
+  </tr>
+</table>
+
+<table>
+  <tr>
+    <td>移动指针</td><td></td><td></td><td></td><td>newStartVnode</td><td></td>
+  </tr>
+  <tr>
+    <td>ch：</td><td></td><td></td>
+    <td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">1</div></td>
+    <td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">2</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">3</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">4</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">5</div></td>
+  </tr>
+  <tr>
+    <td>oldch：</td>
+    <td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">1</div></td>
+    <td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">2</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">3</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">4</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">5</div></td>
+  </tr>
+  <tr>
+    <td></td><td></td><td></td><td></td><td>oldEndVnode</td><td></td>
+  </tr>
+</table>
+
+此时真实元素会这样排列：
+
+<table>
+  <tr>
+    <td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">5</div></td>
+    <td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">1</div></td>
+    <td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">2</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">3</div></td><td><div style="border: 1px solid black; height: 30px;width: 30px;text-align: center;line-height: 30px;margin: 2px;">4</div></td>
+  </tr>
+</table>
+
+7. 最后一种情况就是以上都没有匹配到，无论 '前前'、'后后'、'前后',这个时候就要利用  `key` 值进行搜索了。
 
 [simplehtmlparser]:http://erik.eae.net/simplehtmlparser/simplehtmlparser.js
 [createElement]:https://cn.vuejs.org/v2/guide/render-function.html#createElement-%E5%8F%82%E6%95%B0
