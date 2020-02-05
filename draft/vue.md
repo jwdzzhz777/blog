@@ -1779,8 +1779,28 @@ ok，有了这些值就可以开始我们的循环操作了，只要 `oldStartId
   </tr>
 </table>
 
-7. 最后一种情况就是以上都没有匹配到，无论 '前前'、'后后'、'前后',这个时候就要利用  `key` 值进行搜索了。
+7. 最后一种情况就是以上都没有匹配到，无论 '前前'、'后后'、'前后',这个时候就要利用  `key` 值进行搜索了。首先通过 `createKeyToOldIdx` 方法拿到 `oldCh` 中前后指针之间的元素的 key-index 的 map (`oldKeyToIdx`)。
 
+```js
+function createKeyToOldIdx (children, beginIdx, endIdx) {
+  let i, key
+  const map = {}
+  for (i = beginIdx; i <= endIdx; ++i) {
+    key = children[i].key
+    if (isDef(key)) map[key] = i
+  }
+  return map
+}
+```
+
+可以看到，`map` 中收集了剩下元素中所有的 `key` 如果没有就用 `index` 当 `key`。这里的 `key` 就是我们编写模版时会指定的 `key` 属性(`<div key="customerKey">something</div>`)，也就是我们自己指定的复用。
+
+接着，拿着 `newStartVnode` 的 `key` 去 map 中找对应的 `key`，如果 `newStartVnode.key` 为 `undefinend`，则调用 `findIdxInOld` 方法，也就是在 `oldch` 的剩余 `vnode` 中一项一项的比对 (`sameVnode`方法) 直到找到相似的 `vnode`，得到其指针 `idxInOld`。
+
+如果上述 `idxInOld` 存在，也就是找到了对应的 `oldVnode` 也要进行相似比较 `sameVnode()`，因为哪怕 `key` 相同元素类型不同也无法复用，如果不相似就通过 `createElm` 方法替换掉老的元素，如果相似就继续调用 `patchVnode` 处理，同时将该元素 `oldVnode.elm` 插入到 `oldStartVnode.elm` 之前，并且将 `oldch` 中该下标的元素清空 `oldCh[idxInOld] = undefined`(也就是第1、2种情况)。
+
+如果上述 `idxInOld` 不存在那么直接 `createElm` 方法替换老元素，最后 `newStartIdx` 右移，继续下一个判断。
+ 
 [simplehtmlparser]:http://erik.eae.net/simplehtmlparser/simplehtmlparser.js
 [createElement]:https://cn.vuejs.org/v2/guide/render-function.html#createElement-%E5%8F%82%E6%95%B0
 [vnode]:https://github.com/vuejs/vue/blob/dev/src/core/vdom/vnode.js
