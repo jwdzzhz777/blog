@@ -1463,7 +1463,7 @@ function patchVnode (
 
 一步一步来，首先拿到 `oldVnode.elm` 也就是真实的dom元素，而且赋值给 `vnode.elm`,紧接着是静态节点优化，这里提一下，在 `ast` 转 `render` 函数之间，有一步静态节点优化 `optimize(ast)`，前面省略了，如果当前节点没有任何动态的元素，就会添加一个静态标记 `isStatic`，在此时，遇到这个标记就直接 return，复用之间的元素（如果是组件就会复用组件实例 `vnode.componentInstance = oldVnode.componentInstance`）。
 
-接着,拿到 `data` (`const data = vnode.data`), 如果当前节点是组件节点，调用组件的 `prepatch hook`，该 `hook` 的作用是处理组件实例，更新属性，并需要的话调用组件更新方法 `$forceUpdate` 也就是 `_update(_render())`。接着处理 `data` 只要 `data` 存在（`isPatchable` 主要就是判断 vnode/组件实例有没有 `tag` 字段）即调用 `update hooks` 处理，大部分和 `create hooks` 处理一样，处理属性、样式、事件
+接着,拿到 `data` (`const data = vnode.data`), 如果当前节点是组件节点，调用组件的 `prepatch hook`，该 `hook` 的作用是处理组件实例，更新属性，并需要的话调用组件更新方法 `$forceUpdate` 也就是 `_update(_render())`。接着处理 `data` 只要 `data` 存在（`isPatchable` 主要就是判断 vnode/组件实例有没有 `tag` 字段）即调用 `update hooks` 处理，大部分和 `create hooks` 处理一样，处理属性、样式等，不过这里会对新老 `data` 中的各项进行相等判断，只有不同的情况才会进行 dom 属性的操作，这里都是些基本类型值的判断，比较简单。
 
 最后是处理 `children`, 拿到新老 `vnode` 的 `children`，如果 `vnode` 有 `text` 字段，且与 `oldVnode.text` 不同则直接将 当前 `dom element` 的 `textContext` 设为 `vnode.text` （`nodeOps.setTextContent(elm, vnode.text)`）。 `text` 的优先级要大于 `children`。抛去 `text` 的特殊情况则有三种情况，`oldCh` 和 `ch` 同时存在，则调用 `updateChildren` 进一步处理，如果 `ch` 存在 `oldCh` 不存在，则调用 `addVnodes` 处理 `children` 并直接插入当前dom 元素(就是循环对子 `vnode` 调用 `createElm`)，如果 `oldCh` 存在而 `ch` 不存在则调用 `removeVnodes` 将其子节点从元素中删除。
 
@@ -1801,7 +1801,37 @@ function createKeyToOldIdx (children, beginIdx, endIdx) {
 
 如果上述 `idxInOld` 不存在那么直接 `createElm` 方法替换老元素，最后 `newStartIdx` 右移，继续下一个判断。
  
+### 关于 diff
+
+从上面的 `patchVnode` 和 `updateChildren` 可以看出，`vue` 的 diff 只对同层级的进行，根节点只对根节点比较，某个节点的子节点只和当前子节点比较，如果父节点不相似则直接替换，根本不用去考虑其子节点，这也是为什么说 diff 大大减少了时间复杂度。
+
+那么为什么说 diff 从 $O(n^3)$ 优化到了 $O(n)$ 呢，我们要知道这个 $O(n^3)$ 是怎么来的的：首先 dom 节点可以看作一个树的结构，如果将一颗树转换为另一颗树，那么计算其最小编辑距离 (Tree edit distance) 的复杂度大约是 $O(n^3)$，这是目前[最好的算法][algorithms]，简单了解即可。然而 `Vue` 并不是对比所有节点，从上面可以看出，它只对比同一层级的且同一父元素的元素：
+
+```js
+<div>                <-- diff -->          <div>
+  <div>              <-- diff -->             <div>
+    <div></div>      <-- ---- -->               <div></div>
+    <div></div>            |                    <div></div>
+    <div></div>          diff                   <div></div>
+    <div></div>            |                    <div></div>
+    <div></div>      <-- ---- -->               <div></div>
+  </div>                                      </div>
+  <div></div>        <-- diff -->             <div></div>
+</div>                                     </div>
+```
+
+也就是说无论树结构多复杂，都只和节点数量有关系，而递归遍历一遍树的复杂度为 $O(n)$，也就是说正常情况下前后节点都是 n 时 diff 的复杂度就是 $O(n)$，特殊一点的比如上述情况 5个子节点顺序全打乱了，那么其最多也就对比 $!(n-1)$ 次而已（同一层级），假如一个`vnode` 的顺序全打乱了 (同一层级) 其复杂度也远远小于 $O(!n)$ 。如果但凡有一个节点不同了，那么该就直接替换了，其子节点也就不比较了，你要是根节点就变了直接 diff 一次就结束了，所以说这种方式就将复杂度降为了 $O(n)$。
+
+所以说为什么需要 diff + `vnode` ，如果没有，那么每次更新都会将整个 dom 树干掉，然后插入新的，这样每次都要 dom 操作代价太大，这这个 diff 算法又保证了每次 diff js层不会开销太大。把每次更新的消耗都控制在可接受范围内，这就是 virtual dom + diff 的初衷了。
+
+## 最后
+
+这次主要看了遍 数据绑定 和 虚拟dom 相关的代码，其实衍生开来差不多七七八八代码都看的差不多了，和当初自己认为的差别还是蛮大的，果然还是要看一遍源码，接下来会尝试这自己实现一下简单的 mvvm 模式。
+
+
+
 [simplehtmlparser]:http://erik.eae.net/simplehtmlparser/simplehtmlparser.js
 [createElement]:https://cn.vuejs.org/v2/guide/render-function.html#createElement-%E5%8F%82%E6%95%B0
 [vnode]:https://github.com/vuejs/vue/blob/dev/src/core/vdom/vnode.js
 [nodeType]:https://www.w3school.com.cn/jsref/prop_node_nodetype.asp
+[algorithms]:https://grfia.dlsi.ua.es/ml/algorithms/references/editsurvey_bille.pdf
