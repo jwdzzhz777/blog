@@ -44,6 +44,24 @@ Object.defineProperty(window, 'b', {
 });
 ```
 
+## 算法
+
+### bilibili reverse
+
+用 JavaScript 写一个函数，输入 int 型，返回整数逆序后的字符串。如：输入整型 1234，返回字符串“4321”。要求必须使用递归函数调用，不能用全局变量，输入函数必须只有一个参数传入，必须返回字符串。
+
+```js
+function reverse(num) {
+  num = num + '';
+  let result = num[0];
+  let right = num.slice(1);
+  if (right.length > 0) {
+    result = reverse(+right) + result;
+  }
+  return result;
+}
+```
+
 ## javascript
 
 ### 平等表达式 `==`
@@ -64,20 +82,25 @@ if(a == 1 && a == 2 && a == 3){
 递归实现：
 
 ```js
-function flatten(arr) {
+// 去重且升序
+function flatten(arr, cache) {
+  cache = cache || {};
   let result = [];
   arr.forEach(item => {
     if (Array.isArray(item)) {
-      result = result.concat(flatten(item));
+      result = result.concat(flatten(item, cache));
     } else {
-      result.push(item);
+      if (!cache[item]) {
+        result.push(item);
+        cache[item] = 1;
+      }
     }
   });
-  return result;
+  return result.sort((a, b) => a - b);
 }
 ```
 
-非递归：
+内置函数实现：
 
 ```js
 arr.toString().split(',');
