@@ -619,6 +619,165 @@ ok, 至此 `reactivity` 的内容我们看完了，简单的说和之前版本�
 
 ## createApp
 
+和之前一样我们来梳理一遍从创建 app 到页面渲染的流程。3.0 对项目结构也做了调整，之前 `import Vue from 'vue'` 是一个构造方法，而现在是一个集合，其大部分的东西都在 `runtime-core` 包中，而创建 app 的方法也在其中：
+
+```js
+const { render: baseRender, createApp: baseCreateApp }=createRenderer({
+  patchProp,
+  ...nodeOps
+})
+
+// use explicit type casts here to avoid import() calls in rolled-up d.ts
+export const render=baseRender as RootRenderFunction<Node, Element>
+
+export const createApp: CreateAppFunction<Element>=(...args) => {
+  const app=baseCreateApp(...args)
+
+  const { mount }=app
+  app.mount=(container): any => {
+    if (isString(container)) {
+      container=document.querySelector(container)!
+    }
+    const component=app._component
+    if (
+      __RUNTIME_COMPILE__&&
+      !isFunction(component)&&
+      !component.render&&
+      !component.template
+    ) {
+      component.template=container.innerHTML
+    }
+    // clear content before mounting
+    container.innerHTML=''
+    return mount(container)
+  }
+
+  return app
+}
+```
+
+调用 `baseCreateApp` 方法获得 app 实例，`baseCreateApp` 通过 `createRenderer` 方法获得，然后扩展 `mount` 方法,主要通过 `selector` 得到真正的 dom 元素。
+
+`createRenderer` 方法内置了很多方法，将之前 `patch` 相关的全部流程都放在了里面，最后返回一个 `render` 方法和一个通过 createApi 生成的 `createApp` 方法：
+
+```ts
+function createRenderer<
+  HostNode extends object=any,
+  HostElement extends HostNode=any
+>(
+  options: RendererOptions<HostNode, HostElement>
+): {
+  render: RootRenderFunction<HostNode, HostElement>
+  createApp: CreateAppFunction<HostElement>
+} {
+  function patch() {...}
+
+  ... 各种方法这里不贴了
+
+  const render: RootRenderFunction<HostNode, HostElement>=(
+    vnode,
+    container: HostRootElement
+  ) => {
+    if (vnode==null) {
+      if (container._vnode) {
+        unmount(container._vnode, null, null, true)
+      }
+    } else {
+      patch(container._vnode||null, vnode, container)
+    }
+    flushPostFlushCbs()
+    container._vnode=vnode
+  }
+
+  return {
+    render,
+    createApp: createAppAPI(render)
+  }
+}
+```
+
+`render` 类似于之前的 `_update` 方法，主要是调用 `patch` 方法。我们先来看看 `createAppAPI` 方法：
+
+```ts
+function createAppAPI<HostNode, HostElement>(
+  render: RootRenderFunction<HostNode, HostElement>
+): CreateAppFunction<HostElement> {
+  return function createApp(rootComponent: Component, rootProps=null) {
+    const context=createAppContext()
+
+    let isMounted=false
+
+    const app: App={
+      _component: rootComponent,
+      _props: rootProps,
+      _container: null,
+      _context: context,
+      get config() {
+        return context.config
+      },
+      set config(v) {},
+      use(plugin: Plugin, ...options: any[]) {...},
+      mixin(mixin: ComponentOptions) {...},
+      component(name: string, component?: Component): any {...},
+      directive(name: string, directive?: Directive) {...},
+      mount(rootContainer: HostElement): any {
+        if (!isMounted) {
+          const vnode=createVNode(rootComponent, rootProps)
+          // store app context on the root VNode.
+          // this will be set on the root instance on initial mount.
+          vnode.appContext=context
+
+          render(vnode, rootContainer)
+          isMounted=true
+          app._container=rootContainer
+          return vnode.component!.proxy
+        } else if (__DEV__) {
+          warn(
+            `App has already been mounted. Create a new app instance instead.`
+          )
+        }
+      },
+      unmount() {...},
+      provide(key, value) {...}
+    }
+
+    return app
+  }
+}
+```
+
+其接受 `render` 函数生成一个 `createApp` 方法，终于找到你了，`createApp` 其定义了一个 app 实例初始的结构，里面有我们熟悉的方法：`use`、`mixin` 等等，就是之前的 `Vue.use`、`Vue.minxin` 等方法，最后返回这个实例，可以看出和之前的区别，Vuejs2.0 在 `new Vue` 时会各种初始化 `initLifecycle`、`initEvents`、`initRender` 等等，现在统统没有了，都放在 了 `mount` 方法中，那么我们来看看 `mount` 方法。
+
+之前提到 `Vue` 实例上暴露的 `mount` 主要用来获取 dom element (`rootContainer`)，然后调用这个内置 `mount`，该方法简单来说就干了两件事 `createVNode` 和 `render`。
+
+这里 `createVNode` 主要就是生成一个根 `vnode`。 该 `vnode` 是空的，其中 `vnode.type` 存了 `createApp` 的第一个参数，也就是 options （当然还会处理 `createApp` 的第二个参数 `rootProps` 相当于给实例穿了 `props`，存在 `vnode.props` 中）。`vnode` 的结构大致长这样：
+
+```ts
+const vnode: VNode = {
+    _isVNode: true,
+    type,
+    props,
+    key: (props !== null && props.key) || null,
+    ref: (props !== null && props.ref) || null,
+    scopeId: currentScopeId,
+    children: null,
+    component: null,
+    suspense: null,
+    dirs: null,
+    transition: null,
+    el: null,
+    anchor: null,
+    target: null,
+    shapeFlag,
+    patchFlag,
+    dynamicProps,
+    dynamicChildren: null,
+    appContext: null
+  }
+```
+
+调用 `render` 时传入了刚刚生成的 `vnode` 和 dom element，现在我们回到 `createRenderer` 看看 `render` 方法。正常情况其直接调用了 `createRenderer` 的 `patch` 方法,我们来看看 `patch`
+
 [my-vue]:https://github.com/jwdzzhz777/blog/blob/master/articles/vue.md
 [vue-next]:https://github.com/vuejs/vue-next
 [alpha4]:https://github.com/vuejs/vue-next/releases/tag/v3.0.0-alpha.4
