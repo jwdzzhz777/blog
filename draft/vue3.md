@@ -696,7 +696,7 @@ function createRenderer<
 }
 ```
 
-`render` 类似于之前的 `_update` 方法，主要是调用 `patch` 方法。我们先来看看 `createAppAPI` 方法：
+`render` 方法主要是调用 `patch` 方法。在这之前，我们先来看看 `createAppAPI` 方法：
 
 ```ts
 function createAppAPI<HostNode, HostElement>(
@@ -731,10 +731,6 @@ function createAppAPI<HostNode, HostElement>(
           isMounted=true
           app._container=rootContainer
           return vnode.component!.proxy
-        } else if (__DEV__) {
-          warn(
-            `App has already been mounted. Create a new app instance instead.`
-          )
         }
       },
       unmount() {...},
@@ -746,7 +742,9 @@ function createAppAPI<HostNode, HostElement>(
 }
 ```
 
-其接受 `render` 函数生成一个 `createApp` 方法，终于找到你了，`createApp` 其定义了一个 app 实例初始的结构，里面有我们熟悉的方法：`use`、`mixin` 等等，就是之前的 `Vue.use`、`Vue.minxin` 等方法，最后返回这个实例，可以看出和之前的区别，Vuejs2.0 在 `new Vue` 时会各种初始化 `initLifecycle`、`initEvents`、`initRender` 等等，现在统统没有了，都放在 了 `mount` 方法中，那么我们来看看 `mount` 方法。
+其接受 `render` 函数生成一个 `createApp` 方法，终于找到你了，`createApp` 其定义了一个 app 实例初始的结构，里面有我们熟悉的方法：`use`、`mixin` 等等，就是之前的 `Vue.use`、`Vue.minxin` 等方法，最后返回这个实例，可以看出和之前的区别，Vuejs2.0 在 `new Vue` 时会各种初始化 `initLifecycle`、`initEvents`、`initRender` 等等，现在统统没有了，都放在 了 `mount` 方法中。
+
+### mount 过程
 
 之前提到 `Vue` 实例上暴露的 `mount` 主要用来获取 dom element (`rootContainer`)，然后调用这个内置 `mount`，该方法简单来说就干了两件事 `createVNode` 和 `render`。
 
@@ -776,7 +774,472 @@ const vnode: VNode = {
   }
 ```
 
-调用 `render` 时传入了刚刚生成的 `vnode` 和 dom element，现在我们回到 `createRenderer` 看看 `render` 方法。正常情况其直接调用了 `createRenderer` 的 `patch` 方法,我们来看看 `patch`
+调用 `render` 时传入了刚刚生成的 `vnode` 和 dom element，现在我们回到 `createRenderer`, `render` 方法正常情况其直接调用了 `createRenderer` 的 `patch` 方法，那么我们来看看 `patch` 方法：
+
+```ts
+function patch(
+    n1: HostVNode|null, // null means this is a mount
+    n2: HostVNode,
+    container: HostElement,
+    anchor: HostNode|null=null,
+    parentComponent: ComponentInternalInstance|null=null,
+    parentSuspense: HostSuspenseBoundary|null=null,
+    isSVG: boolean=false,
+    optimized: boolean=false
+  ) {
+    // patching & not same type, unmount old tree
+    if (n1!=null&&!isSameVNodeType(n1, n2)) {
+      anchor=getNextHostNode(n1)
+      unmount(n1, parentComponent, parentSuspense, true)
+      n1=null
+    }
+
+    const { type, shapeFlag }=n2
+    switch (type) {
+      case Text:
+        processText(...)
+        break
+      case Comment:
+        processCommentNode(...)
+        break
+      case Fragment:
+        processFragment(...)
+        break
+      case Portal:
+        processPortal(...)
+        break
+      default:
+        if (shapeFlag&ShapeFlags.ELEMENT) {
+          processElement(...)
+        } else if (shapeFlag&ShapeFlags.COMPONENT) {
+          processComponent(
+            n1,
+            n2,
+            container,
+            anchor,
+            parentComponent,
+            parentSuspense,
+            isSVG,
+            optimized
+          )
+        } else if (__FEATURE_SUSPENSE__&&shapeFlag&ShapeFlags.SUSPENSE) {
+          ; (type as typeof SuspenseImpl).process()
+        }
+    }
+  }
+```
+
+首先是判断新老 `vnode` 是否相似。注意 `vnode.type` 存的是最原始的 `option` 和 `templete`，所以 `isSameVNodeType` 也主要是判断 `vnode.type` 是否变化，和 `key` 是否一致（这里和旧版本的 `isSameVNode` 稍稍有些不一样，但功能是一样的，相似即可复用），如果变化则会调用 `unmount`，清除去上一次的渲染结果。接着 `type` 有各种情况，我们就不展开了，主要看看正常情况，也就是组件的情况 `processComponent`：
+
+```ts
+function processComponent(
+  n1: HostVNode|null,
+  n2: HostVNode,
+  container: HostElement,
+  anchor: HostNode|null,
+  parentComponent: ComponentInternalInstance|null,
+  parentSuspense: HostSuspenseBoundary|null,
+  isSVG: boolean,
+  optimized: boolean
+) {
+  if (n1==null) {
+    mountComponent(
+      n2,
+      container,
+      anchor,
+      parentComponent,
+      parentSuspense,
+      isSVG
+    )
+  } else {
+    const instance=(n2.component=n1.component)!
+
+    if (shouldUpdateComponent(n1, n2, parentComponent, optimized)) {
+      if (
+        __FEATURE_SUSPENSE__&&
+        instance.asyncDep&&
+        !instance.asyncResolved
+      ) {
+        updateComponentPreRender(instance, n2)
+        return
+      } else {
+        // normal update
+        instance.next=n2
+        // instance.update is the reactive effect runner.
+        instance.update()
+      }
+    } else {
+      // no update needed. just copy over properties
+      n2.component=n1.component
+      n2.el=n1.el
+    }
+  }
+}
+```
+
+`n1,n2` 就是 `oldVnode，vnode`，当 `oldVnode` 不存在则调用 `mountComponent` 初始化、渲染，存在则更新视图，我们现在看看初始化的过程：
+
+```ts
+function mountComponent(
+    initialVNode: HostVNode,
+    container: HostElement,
+    anchor: HostNode|null,
+    parentComponent: ComponentInternalInstance|null,
+    parentSuspense: HostSuspenseBoundary|null,
+    isSVG: boolean
+  ) {
+    const instance: ComponentInternalInstance=(initialVNode.component=createComponentInstance(
+      initialVNode,
+      parentComponent
+    ))
+
+    // resolve props and slots for setup context
+    setupComponent(instance, parentSuspense)
+
+    setupRenderEffect(
+      instance,
+      parentSuspense,
+      initialVNode,
+      container,
+      anchor,
+      isSVG
+    )
+  }
+```
+
+首先是生成一个 `compomentInstance` 实例并挂载在 `vnode.component` 上，这个实例存了 `vnode` 本身、一堆字段和一个 `emit` 方法，代码就不贴了各位自己搜，接着 `setupComponent` 方法用于一系列初始化，`setupRenderEffect` 则利用 `reactivity` 的 `effect` 处理渲染方法。到了这一步总算开始初始化过程了，也就是之前的各种 `intxxx` 方法，现在全都放在了 `setupComponent` 方法，那么我们看看发生了什么：
+
+### setupComponent
+
+直接上代码：
+
+```ts
+function setupComponent(
+  instance: ComponentInternalInstance,
+  parentSuspense: SuspenseBoundary | null,
+  isSSR = false
+) {
+  isInSSRComponentSetup = isSSR
+  const propsOptions=instance.type.props // type 就是 options, type.props 就是 props 的 options
+  const { props, children, shapeFlag } = instance.vnode // vnode.props 就是 createApp 的第二个参数 props
+  // 根据 propsOptions 和 props 设置 instance.props
+  resolveProps(instance, props, propsOptions)
+  resolveSlots(instance, children)
+
+  // setup stateful logic
+  let setupResult
+  if (shapeFlag & ShapeFlags.STATEFUL_COMPONENT) {
+    setupResult = setupStatefulComponent(instance, parentSuspense)
+  }
+  isInSSRComponentSetup = false
+  return setupResult
+}
+```
+
+首先是处理 `props`，`instance.type` 存的是原始的 `options`，所以 `instance.type.props` 就是我们设置的 props 规则（`props: {data: string}` 这种）,而实际传入的值在其父 `vnode.props` 中（创建 app 时父 `vnode` 就是在 `mount` 中创建的 `vnode` 此时会处理 `createApp` 的第二个参数 `rootProps` 并放入 `vnode`）。接着通过 `resolveProps` 来处理 `props` ,具体代码不展开了，`props` 会存在 `instance.props` 并设置代理 `instance.propsProxy`。
+
+接着是 `resolveSlots`，也就是处理 `slot` 将 `children` 和其 `children。name` 以 map 的形式存在 `instance.slot` 中，这里也不贴代码了，当然初始化 app 没有 slot。
+
+接下来是 `setupStatefulComponent` 方法，3.0 新增了 `setup` 方法来代替之前的 `data`、`methods` 等等功能，而该方法就是来处理 `setup`，同时处理实例的代理：
+
+```ts
+function setupStatefulComponent(
+  instance: ComponentInternalInstance,
+  parentSuspense: SuspenseBoundary | null
+) {
+  const Component = instance.type as ComponentOptions
+
+  // 0. create render proxy property access cache
+  instance.accessCache = {}
+  // 1. create public instance / render proxy
+  // instance 的代理，
+  instance.proxy = new Proxy(instance, PublicInstanceProxyHandlers)
+  // 2. create props proxy
+  // the propsProxy is a reactive AND readonly proxy to the actual props.
+  // it will be updated in resolveProps() on updates before render
+  // propsProxy 是 instance.props 的代理，让其只读
+  const propsProxy = (instance.propsProxy = isInSSRComponentSetup
+    ? instance.props
+    : shallowReadonly(instance.props))
+  // 3. call setup()
+  const { setup } = Component
+  if (setup) {
+    const setupContext = (instance.setupContext =
+      setup.length > 1 ? createSetupContext(instance) : null)
+
+    currentInstance = instance
+    const setupResult = callWithErrorHandling(
+      setup,
+      instance,
+      ErrorCodes.SETUP_FUNCTION,
+      [propsProxy, setupContext]
+    )
+    currentInstance = null
+
+    if (isPromise(setupResult)) {
+      if (isInSSRComponentSetup) {
+        // return the promise so server-renderer can wait on it
+        return setupResult.then(resolvedResult => {
+          handleSetupResult(instance, resolvedResult, parentSuspense)
+        })
+      } else if (__FEATURE_SUSPENSE__) {
+        // async setup returned Promise.
+        // bail here and wait for re-entry.
+        instance.asyncDep = setupResult
+      }
+    } else {
+      handleSetupResult(instance, setupResult, parentSuspense)
+    }
+  } else {
+    finishComponentSetup(instance, parentSuspense)
+  }
+}
+```
+
+首先是设置代理，`accessCache` 对象用于存储各个 key 来自哪里(data 或 props 或 instance 本身)，`proxy` 为 `instance` 自身的代理，每次对实例进行操作 `this.xxx` (非 `$` 开头) 都会在 `accessCache` 中查找其来源，然后对其来源进行操作 (当然若没有就会一个一个找，并存在 `accessCache` 中，代码在 `PublicInstanceProxyHandlers` 中，就不贴了)，接着会为 prop 单独设置一个代理 `propsProxy` 当 `this.xxx` 的key 'xxx' 来自与 props 时实际操作的是 `propsProxy`，而 `propsProxy` 被设置为只读的，毕竟 props 是由父 vnode 决定，不可修改。
+
+接下来是处理 `setup` 如果我们使用了 `setup` 首先会生成一个 `setupContext` 作为调用时的入参，里面有三个字段，`attrs` 和 `slots` 是 instance 对应属性的代理（之所以是代理就是防止修改）`emit` 就是 `instance.emit`，用于发射事件。接着就会以 `propsProxy, setupContext` 为入参调用 `setup` 并拿到结果(当然会处理异步的情况) 。拿到结果 `setupResult` 后调用 `handleSetupResult` 来处理结果。
+
+```ts
+function handleSetupResult(
+  instance: ComponentInternalInstance,
+  setupResult: unknown,
+  parentSuspense: SuspenseBoundary | null
+) {
+  if (isFunction(setupResult)) {
+    // setup returned an inline render function
+    instance.render = setupResult as RenderFunction
+  } else if (isObject(setupResult)) {
+    // setup returned bindings.
+    // assuming a render function compiled from template is present.
+    instance.renderContext = setupResult
+  }
+  finishComponentSetup(instance, parentSuspense)
+}
+```
+
+结果有两种情况，一种是对象，里面放着方法、响应式数据等等，直接绑定在 `instance.renderContext` 上。还有一种是函数，也就对应着之前 `render` 属性，也就是渲染函数如果是渲染函数后期就不用执行 compiler 过程了直接将其赋值给 `instance.render`。
+
+上述完成后会执行 `finishComponentSetup` 进行最后的工作，我们来看看代码：
+
+```ts
+function finishComponentSetup(
+  instance: ComponentInternalInstance,
+  parentSuspense: SuspenseBoundary | null
+) {
+  const Component = instance.type as ComponentOptions
+  if (!instance.render) {
+    if (__RUNTIME_COMPILE__ && Component.template && !Component.render) {
+      // __RUNTIME_COMPILE__ ensures `compile` is provided
+      Component.render = compile!(Component.template, {
+        isCustomElement: instance.appContext.config.isCustomElement || NO
+      })
+      // mark the function as runtime compiled
+      ;(Component.render as RenderFunction).isRuntimeCompiled = true
+    }
+
+    instance.render = (Component.render || NOOP) as RenderFunction
+
+    // for runtime-compiled render functions using `with` blocks, the render
+    // proxy used needs a different `has` handler which is more performant and
+    // also only allows a whitelist of globals to fallthrough.
+    if (__RUNTIME_COMPILE__ && instance.render.isRuntimeCompiled) {
+      instance.withProxy = new Proxy(
+        instance,
+        runtimeCompiledRenderProxyHandlers
+      )
+    }
+  }
+
+  // support for 2.x options
+  if (__FEATURE_OPTIONS__) {
+    currentInstance = instance
+    applyOptions(instance, Component)
+    currentInstance = null
+  }
+}
+```
+
+如果没有提供render函数，则会执行 `compile` 过程，也就是 `template => ast => render 函数` 的过程，此过程相关的代码在 `compiler-xxx` 中，就不在展开了，大体上和上一版本差不多（大概），最后生成 render 函数并挂载在 `instance` 和 `instance.type` 上。
+
+`withProxy` 又是一层 instance 的代理，上一篇有提到，在调用 render 函数时会使用 `with (instance) {...}` 语句来保证执行时拿到 instance 中对应的值，这一次也不例外，不过不是直接用 `with (instance)` 而是 `with (instance.withProxy)`，`withProxy` 的 handler 和 `instance.proxy` 基本一样，都会走 `accessCache` 来获取正确的值。
+
+当然如果我们不使用新的一套 (`setup`) 3.0 还是兼容老的一套的写法，`applyOptions` 中就会对旧版本的属性进行处理，其中包括 `watch`、`computed`、各种生命周期、`data`、`methods` 等等，`data` 函数的结果会 `reactivity` 化，然后还会处理一些共有的属性比如 `directive`、`components` 等。
+
+ok 处理完了各种属性和render函数，我们要开始渲染页面了，让我们回到 `mountComponent` 方法，来看看调用的 `setupRenderEffect`:
+
+### setupRenderEffect
+
+直接看代码
+
+```ts
+function setupRenderEffect(
+    instance: ComponentInternalInstance,
+    parentSuspense: HostSuspenseBoundary|null,
+    initialVNode: HostVNode,
+    container: HostElement,
+    anchor: HostNode|null,
+    isSVG: boolean
+  ) {
+    // create reactive effect for rendering
+    instance.update=effect(function componentEffect() {
+      if (!instance.isMounted) {
+        const subTree=(instance.subTree=renderComponentRoot(instance))
+        // beforeMount hook
+        if (instance.bm!==null) {
+          invokeHooks(instance.bm)
+        }
+        patch(null, subTree, container, anchor, instance, parentSuspense, isSVG)
+        initialVNode.el=subTree.el
+        // mounted hook
+        if (instance.m!==null) {
+          queuePostRenderEffect(instance.m, parentSuspense)
+        }
+        // activated hook for keep-alive roots.
+        if (
+          instance.a!==null&&
+          instance.vnode.shapeFlag&ShapeFlags.COMPONENT_SHOULD_KEEP_ALIVE
+        ) {
+          queuePostRenderEffect(instance.a, parentSuspense)
+        }
+        instance.isMounted=true
+      } else {
+        // updateComponent
+        // This is triggered by mutation of component's own state (next: null)
+        // OR parent calling processComponent (next: HostVNode)
+        const { next }=instance
+
+        if (next!==null) {
+          updateComponentPreRender(instance, next)
+        }
+        const nextTree=renderComponentRoot(instance)
+        const prevTree=instance.subTree
+        instance.subTree=nextTree
+        // beforeUpdate hook
+        if (instance.bu!==null) {
+          invokeHooks(instance.bu)
+        }
+        // reset refs
+        // only needed if previous patch had refs
+        if (instance.refs!==EMPTY_OBJ) {
+          instance.refs={}
+        }
+        patch(
+          prevTree,
+          nextTree,
+          // parent may have changed if it's in a portal
+          hostParentNode(prevTree.el as HostNode) as HostElement,
+          // anchor may have changed if it's in a fragment
+          getNextHostNode(prevTree),
+          instance,
+          parentSuspense,
+          isSVG
+        )
+        instance.vnode.el=nextTree.el
+        if (next===null) {
+          // self-triggered update. In case of HOC, update parent component
+          // vnode el. HOC is indicated by parent instance's subTree pointing
+          // to child component's vnode
+          updateHOCHostEl(instance, nextTree.el)
+        }
+        // updated hook
+        if (instance.u!==null) {
+          queuePostRenderEffect(instance.u, parentSuspense)
+        }
+      }
+    }, prodEffectOptions)
+  }
+```
+
+通过 `effect` 函数处理 `componentEffect` 方法，并将返回的 `effect` 方法赋值给 `instance.update`，我们之前已经了解了 `effect` 的作用，所以我们现在来看看 `componentEffect`。
+
+`renderComponentRoot` 实际就是调用 render 方法（`instance.render!.call(withProxy || proxy)`）并拷贝实例的 `attrs` 属性，最后返回 `vnode`。在调用 `render` 函数的过程中会从触发实例中响应式数据的 `getter` 结合之前讲的，这些数据就和 `componentEffect` 绑定起来，一旦数据变化，就会调用 `componentEffect` 达到重新渲染的目的。
+
+`isMounted` 标记是否已经渲染，其区分是初始化过程还是更新过程。
+
+得到 `vnode` 后执行 `patch` 流程。`patch` 流程大体上和之前类似，做了许多优化，针对不同节点不同处理，同时 diff 也做了稍许变动，大体上算法还是差不多（对撞指针），不过如果 diff 的列表里没有一个设置 key ，那么循环一遍就好了。具体代码也不贴了。
+
+同时生命周期的回调也在这处理，不过新版有点不同，我们知道之前生命周期的函数是作为 options 声明的，直接在 `$mount` 时对应阶段调用就行，不过新版在 `setup` 中有些不同，我们是这样用的：
+
+```ts
+const { createApp, onMounted } = Vue
+
+createApp({
+  setup() {
+    onMounted(() => {
+      ...
+    })
+
+    return ...;
+  }
+})
+```
+
+在 `setup` 函数中通过 `onMounted` 函数处理，这样如何确认生命周期方法来自于哪个实例呢，首先我们先回到 `setupStatefulComponent` 方法，在处理 `setup` 函数或者 2.0 版本写法时我们都全局存了 instance
+
+```ts
+currentInstance = instance
+const setupResult = callWithErrorHandling(
+  setup,
+  instance,
+  ErrorCodes.SETUP_FUNCTION,
+  [propsProxy, setupContext]
+)
+currentInstance = null
+
+currentInstance = instance
+applyOptions(instance, Component)
+currentInstance = null
+```
+
+这样我们在处理生命周期 hooks 的时候就可以拿到当前实例了，我们来看看代码
+
+```ts
+function injectHook(
+  type: LifecycleHooks,
+  hook: Function & { __weh?: Function },
+  target: ComponentInternalInstance | null = currentInstance,
+  prepend: boolean = false
+) {
+  if (target) {
+    const hooks = target[type] || (target[type] = [])
+    // cache the error handling wrapper for injected hooks so the same hook
+    // can be properly deduped by the scheduler. "__weh" stands for "with error
+    // handling".
+    const wrappedHook =
+      hook.__weh ||
+      (hook.__weh = (...args: unknown[]) => {
+        if (target.isUnmounted) {
+          return
+        }
+        // disable tracking inside all lifecycle hooks
+        // since they can potentially be called inside effects.
+        pauseTracking()
+        // Set currentInstance during hook invocation.
+        // This assumes the hook does not synchronously trigger other hooks, which
+        // can only be false when the user does something really funky.
+        setCurrentInstance(target)
+        const res = callWithAsyncErrorHandling(hook, target, type, args)
+        setCurrentInstance(null)
+        resumeTracking()
+        return res
+      })
+    if (prepend) {
+      hooks.unshift(wrappedHook)
+    } else {
+      hooks.push(wrappedHook)
+    }
+  }
+}
+```
+
+实际上新版生命周期方法都会调用 `injectHook`，其中 `type` 是生命周期的名字(如 `onMounted`)，`hook` 是我们的处理方法，`target` 是当前实例。`target` 在未指定的情况下默认指向我们全局存的 `currentInstance`，仔细想想，处理 `setup` 函数在渲染之前，只有在渲染的时候才会处理 children，才有可能出现其他的 componentInstance，并不会出现叠加的情况，所以一个全局变量就够了。
+
+内容比较好理解，简单的说就是把我们的处理方法放入实例对应的属性中（数组）`target[type].push(wrappedHook)`。注意 `pauseTracking` 和 `resumeTracking` 两个方法，他们是 `reactivity` 中的依赖收集的开关，也就是说 Vue 不希望在生命周期函数中发生依赖收集，因为这些方法可能出现在某个 effect 处理中。
+
+***
+
+ok 至此从新建app 到渲染的过程就梳理完了，的确相比之前变化还算是蛮大的，不过核心的部分都还没有变，再加上现在还是 alpha 版，所以现在只是简单梳理下，并和 2.0 做了个对比，所以很多地方都没有提到，有兴趣可以自己去看。当然这篇并不是完了，等到正式版更新肯定还会有所不同，所以届时还会继续更新。
 
 [my-vue]:https://github.com/jwdzzhz777/blog/blob/master/articles/vue.md
 [vue-next]:https://github.com/vuejs/vue-next
