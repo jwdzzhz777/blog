@@ -1,4 +1,4 @@
-# github Api v4 (GraphQL)使用记录
+# github Api v4 (GraphQL) 记录
 
 最近想接入 `github Api` 做一些事情，去文档一看发现无论 github 还是 gitlab 都更新了，都拥抱了 `GraphQL` 。之前接入 gitlab api 的时候都还是用 `REST API` 的，这下一下子不习惯了，折腾了好久，就在这里记录下。
 
