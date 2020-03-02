@@ -6,6 +6,7 @@
 
 * `complier`: `template` 的编译，方便起见就不搞一套 virtualDom 了，ast 也不搞了，直接 element 搞起。
 * `reactivity`: 响应式数据，参照 Vue3.0 的 `reactivity` 搞一个简单版的。
+* `vnode`: 虚拟dom，用于 diff。
 * `core`：框架本体
 
 大概梳理完，我们开工。
