@@ -62,7 +62,52 @@ function reverse(num) {
 }
 ```
 
+## HTML
+
+### preload & prefetch
+
+```html
+<link rel="preload" href="style.css" as="style">
+<link rel="prefetch" href="js/chunk-xxx.js">
+```
+
+两者都是预加载资源并缓存，加载后并不执行，等真正用到时在执行，不过优先级不一样。
+
+`prefetch` 为预先加载之后**可能**会用到的资源，浏览器会在空闲时间加载这些资源。
+
+`preload` 为预先加载之后**一定**会用到的资源，标记了 `preload` 的资源会在页面生命周期的早期加载，再进行浏览器的主渲染，并不会阻塞进程。
+
 ## javascript
+
+### 经典的继承算法
+
+```js
+let _extends = (function() {
+  function F() {};
+  return function(target, parent) {
+    F.prototype = parent.prototype;
+    target.prototype = new F();
+    target.prototype.constructor = target;
+  }
+})()
+
+function Child(age, name) {
+  Parent.call(this, name);
+  this.age = age;
+}
+
+_extends(Child, Parent);
+
+Child.prototype.getAge = function() {return this.age}
+
+function Parent(name) {
+  this.name = name;
+}
+
+Parent.prototype.getName = function() {
+  return this.name;
+}
+```
 
 ### 平等表达式 `==`
 
@@ -310,6 +355,97 @@ task => task 的最后修改 dom => run `microtask` => ui 渲染 => task(宏任�
 vue3 曾经的新功能，时间切片
 [看这篇][time_slicing]
 
+## typescript
+
+### `?.` 操作符 和 `!.` 操作符
+
+`!.` 操作符是 TypeScript 2.0 引入的，它的作用是告诉类型检察器我确定 `a` 肯定不是 `null` 或者 `undefined`
+
+```ts
+let a;
+// ... a do something
+
+// 告诉检察器这里 a 一定存在
+a!.b();
+```
+
+也就是 `!.` 并不会转换多余的代码，也不会改变结果，如果此时 `a.b` 不存在（就像上述代码）就会报错。详情见[官方文档][non_null_operator]。
+
+`?.` 操作符是 TypeScript 3.7 引入的 [Optional Chaining][optional_chaining] 其作用是当编写代码时遇到 `null` 或 `undefiend` 时立即停止运行表达式:
+
+```ts
+let x = foo?.bar.baz();
+```
+
+此时 `foo` 还未定义，所以后面的代码不会执行，也就不会报错，`x` 会被赋值为 `undefiend`。
+
+### leetcode 题目
+
+题目链接][leetcode_ts]
+
+```ts
+class EffectModule {
+  count = 1;
+  message = "hello!";
+  delay(input: Promise<number>) {
+    return input.then(i => ({
+      payload: `hello ${i}!`,
+      type: 'delay'
+    }));
+  }
+
+  setMessage(action: Action<Date>) {
+    return {
+      payload: action.payload!.getMilliseconds(),
+      type: "set-message"
+    };
+  }
+}
+
+type FilterFunction<T, U> = {
+  [P in keyof T]: T[P] extends U ? P : never
+}[keyof T];
+
+type Mix<T> = Promise<T> | Action<T>;
+
+// 修改 Connect 的类型，让 connected 的类型变成预期的类型
+type Connect = (module: EffectModule) => {
+    [P in FilterFunction<EffectModule, Function>]: (
+      input: Parameters<EffectModule[P]>[0] extends Mix<infer T> ? T : never
+    ) => ReturnType<EffectModule[P]> extends Promise<infer T>
+      ? T
+      : ReturnType<EffectModule[P]>;
+};
+
+const connect: Connect = m => ({
+  delay: (input: number) => ({
+    type: 'delay',
+    payload: `hello 2`
+  }),
+  setMessage: (input: Date) => ({
+    type: "set-message",
+    payload: input.getMilliseconds()
+  })
+});
+
+type Connected = {
+  delay(input: number): Action<string>;
+  setMessage(action: Date): Action<number>;
+};
+
+export const connected: Connected = connect(new EffectModule());
+```
+
+知识点:
+
+* 怎么从 `{a: string, b: Function}` 的类型中排除非 `function` 的字段，我知道 `{ [P in keyof T]: T[P] extends U ? P : never }` 可以做到 `{xxx: never, xxx: Function}`，但是 `never` 很奇怪， 没想到后面跟上 `[keyof T]` 就可以变成 `'b, xxx, xxx'` 这些全是类型为 `function` 的字段名。
+* 获取方法的参数类型 `Parameters<Function>`
+* 获取方法的返回类型 `ReturnType<Function>`
+* 从 `AA<BB>` 类型中拿到 `BB` 类型，主要是 `infer` 语句： `AA<BB> extends AA<infer T> ? T : other` 其中 `T` 就是拿到的 `BB` 类型。
+
 [Array exotic object]:https://www.ecma-international.org/ecma-262/6.0/#sec-array-exotic-objects
 [time_slicing]:https://zhuanlan.zhihu.com/p/88996118
 [MyPromise]:https://github.com/jwdzzhz777/myPromise
+[non_null_operator]:https://www.typescriptlang.org/docs/handbook/release-notes/typescript-2-0.html#non-null-assertion-operator
+[optional_chaining]:http://www.typescriptlang.org/docs/handbook/release-notes/typescript-3-7.html#optional-chaining
+[leetcode_ts]:https://github.com/LeetCode-OpenSource/hire/blob/master/typescript_zh.md
