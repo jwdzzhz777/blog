@@ -238,7 +238,7 @@ Reflect.ownKeys(test); // ['a', 'b', Symbol(c), Symbol(d)]
 
 ### Event Loop
 
-见 blog event loop
+见 blog [event loop][event_loop]
 
 ### Promise
 
@@ -346,7 +346,7 @@ task => task 的最后修改 dom => run `microtask` => ui 渲染 => task(宏任�
 
 也就是说如果 `nextTick` 是微任务，不管我们嵌套多少个 nexttick ，回调都能拿到正确的 dom 并且在渲染之前修改 dom 。也就是我们最终只会渲染一次。
 
-个人理解，具体去看 eventloop
+个人理解，可以去看 [blog][event_loop]
 
 ### 3.0
 
@@ -381,9 +381,14 @@ let x = foo?.bar.baz();
 
 ### leetcode 题目
 
-题目链接][leetcode_ts]
+[题目链接][leetcode_ts]
 
 ```ts
+interface Action<T> {
+  payload?: T;
+  type: string;
+}
+
 class EffectModule {
   count = 1;
   message = "hello!";
@@ -449,3 +454,4 @@ export const connected: Connected = connect(new EffectModule());
 [non_null_operator]:https://www.typescriptlang.org/docs/handbook/release-notes/typescript-2-0.html#non-null-assertion-operator
 [optional_chaining]:http://www.typescriptlang.org/docs/handbook/release-notes/typescript-3-7.html#optional-chaining
 [leetcode_ts]:https://github.com/LeetCode-OpenSource/hire/blob/master/typescript_zh.md
+[event_loop]:https://github.com/jwdzzhz777/blog/blob/master/articles/eventLoop.md
