@@ -79,6 +79,16 @@ function reverse(num) {
 
 ## javascript
 
+### Generator & async
+
+这里有一篇不错的[文章][how_generators_work]
+
+简单的说 `async` 是 `Generator` 的语法糖 `await` 修饰的语句会被 `Promise` 包裹，异步任务完成后调用 `Generator` 的 `next` 方法。
+
+而 `Generator` 函数会返回一个迭代器器 (iterator)，调用迭代器的 `next` 方法执行函数直到遇到 `yield`， 根据 [ECMA][ECMA_generator] 所说，此时 内部的 `[[GeneratorState]]` 状态将会被置为暂停（task 的 `step` 停止执行？）并返回迭代器。下一次调用 `next` 时 `[[GeneratorState]]` 为恢复状态，代码继续运行。
+
+简单的说～嗯！
+
 ### 深度优先 & 广度优先
 
 用 dom 元素来模拟
@@ -643,3 +653,5 @@ export const connected: Connected = connect(new EffectModule());
 [optional_chaining]:http://www.typescriptlang.org/docs/handbook/release-notes/typescript-3-7.html#optional-chaining
 [leetcode_ts]:https://github.com/LeetCode-OpenSource/hire/blob/master/typescript_zh.md
 [event_loop]:https://github.com/jwdzzhz777/blog/blob/master/articles/eventLoop.md
+[how_generators_work]:https://www.freecodecamp.org/news/yield-yield-how-generators-work-in-javascript-3086742684fc/
+[ECMA_generator]:https://tc39.es/ecma262/#sec-generatoryield
