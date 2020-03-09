@@ -79,6 +79,140 @@ function reverse(num) {
 
 ## javascript
 
+### 深度优先 & 广度优先
+
+用 dom 元素来模拟
+
+```html
+<div id="a">
+    <div id="b">
+        <div id="d"></div>
+        <div id="e"></div>
+    </div>
+    <div id="c">
+        <div id="f"></div>
+        <div id="g"></div>
+    </div>
+</div>
+```
+
+深度优先 递归就可以了
+
+```js
+function deepTraversal(node) {
+  if (!node) return;
+  console.log(node); // 处理 node
+  if (node.children && node.children.length > 0) {
+    Array.from(current.children).forEach(deepTraversal);
+  }
+}
+
+deepTraversal(document.querySelector('#a')) // a b d e c f g
+```
+
+广度优先, 用队列存储要处理的任务
+
+```js
+function widthTraversal(node) {
+  let queue = [node];
+
+  let current;
+  while (queue.length > 0) {
+    current = queue.shift();
+    // 处理
+    console.log(current);
+
+    if (current.children && current.children.length > 0) {
+      queue = queue.concat(Array.from(current.children))
+    }
+  }
+}
+
+widthTraversal(document.querySelector('#a')) // a b c d e f g
+```
+
+### 防抖 & 节流
+
+都是控制触发的频率，比如n秒内触发一次。防抖和节流不一样的是防抖在过程中再次触发会重新计数。
+
+```js
+// 防抖
+function debounce(fn) {
+  let last = Date.now();
+  return function() {
+    let now = Date.now();
+    if ((now - last) > 1000) {
+      fn();
+    }
+    last = now;
+  }
+}
+// 节流
+function throttle(fn) {
+  let last = Date.now();
+  return function() {
+    let now = Date.now();
+    if ((now - last) > 1000) {
+      last = now;
+      fn();
+    }
+  }
+}
+```
+
+代码上也只是细微的区别
+
+### WeakMap & WeakSet
+
+`WeakMap` `WeakSet` 相比 `Map` 和 `Set` 总结来说有两个特点
+
+* 只接接受 `Object` 作为 `key` / `value`
+* 弱引用
+
+意味着 `WeakMap`、`WeakSet` 对象没有没有存储当前对象的列表所以他们都是不可枚举的，也只有简单的 `set/add`、`has`、`delete`（`WeakMap`还有个`get`）。
+
+当然同样是因为弱引用，引用对象是有可能被垃圾回收机制销毁掉的：
+
+```html
+<html lang="en" dir="ltr">
+    <head>
+        <meta charset="utf-8">
+        <title></title>
+    </head>
+    <body>
+        <button onclick="clickHandler(this)">123</button>
+        <script type="text/javascript">
+            let a = {};
+            let wm = new WeakMap();
+            let ws = new WeakSet();
+            wm.set(a, 1);
+            ws.add(a);
+            function clickHandler() {
+                console.log(wm);
+                console.log(ws);
+            }
+            a = null;
+        </script>
+    </body>
+</html>
+```
+
+在浏览器中打开，我们点击按钮打印出了正常的对象
+
+```js
+WeakMap {{…} => 1}
+WeakSet {{…}}
+```
+
+现在我们打开 chrome 的开发者工具 => Performance 点击垃圾桶（Collect garbage）来手动触发垃圾回收。现在我们在点击按钮
+
+```js
+WeakMap {}
+WeakSet {}
+```
+
+引用对象已经被回收了。
+
 ### String.protorype.match
 
 参数是一个正则表达式，返回一个数组。
