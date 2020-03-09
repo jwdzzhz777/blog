@@ -79,6 +79,60 @@ function reverse(num) {
 
 ## javascript
 
+### String.protorype.match
+
+参数是一个正则表达式，返回一个数组。
+
+如果正则带有 `g` 标记（全局），仅仅返回所有表达式匹配的结果
+
+```js
+const varName = '[a-zA-Z0-9]+';
+const position = `https?://[0-9:.]+/${varName}.js:[0-9]+:[0-9]+`;
+const preChrome = `at ${varName} `;
+const preFirefox = `${varName}@`;
+const errorPath = new RegExp(`(${preChrome}|${preFirefox})(${position})`, 'g');
+
+let a = `
+    bar@http://192.168.31.8:8000/c.js:2:9
+    foo@http://192.168.31.8:8000/b.js:4:15
+    calc@http://192.168.31.8:8000/a.js:4:3
+    <anonymous>:1:11
+    http://192.168.31.8:8000/a.js:22:3
+`.match(errorPath)
+// 结果：
+a = [
+  'bar@http://192.168.31.8:8000/c.js:2:9',
+  'foo@http://192.168.31.8:8000/b.js:4:15',
+  'calc@http://192.168.31.8:8000/a.js:4:3'
+]
+```
+
+如果未使用g标志，则仅返回第一个完整匹配及其相关的捕获组（子项）。 在这种情况下，返回的项目将具有如下所述的其他属性。
+
+* `groups`: 一个捕获组数组 或 `undefined`（如果没有定义命名捕获组）。
+* `index`: 匹配的结果的开始位置
+* `input`: 搜索的字符串.
+
+```js
+// 同上
+const errorPath = new RegExp(`(${preChrome}|${preFirefox})(${position})`);
+//同上
+// 结果：
+a = [
+  'bar@http://192.168.31.8:8000/c.js:2:9',
+  'bar@',
+  'http://192.168.31.8:8000/c.js:2:9',
+  index: 5,
+  input: '\n' +
+    '    bar@http://192.168.31.8:8000/c.js:2:9\n' +
+    '    foo@http://192.168.31.8:8000/b.js:4:15\n' +
+    '    calc@http://192.168.31.8:8000/a.js:4:3\n' +
+    '    <anonymous>:1:11\n' +
+    '    http://192.168.31.8:8000/a.js:22:3\n',
+  groups: undefined
+]
+```
+
 ### 经典的继承算法
 
 ```js
