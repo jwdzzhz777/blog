@@ -46,6 +46,33 @@ Object.defineProperty(window, 'b', {
 
 ## 算法
 
+### 二叉树的最大深度
+
+递归，执行一次加个1
+
+```js
+let a = {
+  right: {
+    left: {}
+  },
+  left: {
+    right: {
+      left: {}
+    }
+  }
+}
+function maxDepth(tree) {
+  if (!tree) return 0;
+  let { left, right } = tree;
+  let leftDepth = maxDepth(left);
+  let rightDepth = maxDepth(right);
+
+  return 1 + (rightDepth > leftDepth ? rightDepth : leftDepth);
+}
+
+maxDepth(a);
+```
+
 ### bilibili reverse
 
 用 JavaScript 写一个函数，输入 int 型，返回整数逆序后的字符串。如：输入整型 1234，返回字符串“4321”。要求必须使用递归函数调用，不能用全局变量，输入函数必须只有一个参数传入，必须返回字符串。
@@ -62,7 +89,12 @@ function reverse(num) {
 }
 ```
 
-## HTML
+## 浏览器
+
+### http2
+
+* 二进制传输，取代了 HTTP1.x 的文本传输，更高效
+* 多路复用，一个tcp链接，HTTP1.x 中并发请求多个 TCP 连接，大概6-7个限制
 
 ### preload & prefetch
 
@@ -385,7 +417,9 @@ Array.isArray
 4. return false
 
 只要继承了 Array, 就会继承 Array 的 `Symbol.toStringTag`(其实没有，但能被识别) 和 constructor ，所以如果不改变内置值，从某种意义上将这两个方法差不多。
-Array.isArray 第二步的具体实现不清楚，每个浏览器不一样，如果不存在 `Array.isArray()` 官方建议用 `Object.prototype.toString.call(arg)` 代替 所以就结果来说和前两者差不多，唯一区别是第三步，如果是个代理对象可以判断那个被代理的对象是否是 `Array` 所以 `Array.isArray` 支持更广。
+Array.isArray 第二步的具体实现不清楚，每个浏览器不一样，如果不存在 `Array.isArray()` 官方建议用 `Object.prototype.toString.call(arg)` 代替 所以就结果来说和前两者差不多，唯一区别是第三步，如果是个代理对象可以判断那个被代理的对象是否是 `Array` ，注意这里的代理对象不是指 `Proxy` 生成的对象(实际上 `instanceof` 和 `isArray` 都能判断 `Proxy`)，而是指外来对象，比如值 iframes 中的 `Array` 生成的对象，所以 `Array.isArray` 支持更广。
+
+> note: 他们都支持 Proxy 对象的判断
 
 ### 属性遍历的5种方法
 
