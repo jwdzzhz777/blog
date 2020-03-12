@@ -44,7 +44,7 @@ Object.defineProperty(window, 'b', {
 });
 ```
 
-## 算法
+## 编程
 
 ### 二叉树的最大深度
 
@@ -89,7 +89,135 @@ function reverse(num) {
 }
 ```
 
+### 要求设计 LazyMan 类，实现以下功能
+
+```js
+LazyMan('Tony');
+// Hi I am Tony
+
+LazyMan('Tony').sleep(10).eat('lunch');
+// Hi I am Tony
+// 等待了10秒...
+// I am eating lunch
+
+LazyMan('Tony').eat('lunch').sleep(10).eat('dinner');
+// Hi I am Tony
+// I am eating lunch
+// 等待了10秒...
+// I am eating diner
+
+LazyMan('Tony').eat('lunch').eat('dinner').sleepFirst(5).sleep(10).eat('junk food');
+// Hi I am Tony
+// 等待了5秒...
+// I am eating lunch
+// I am eating dinner
+// 等待了10秒...
+// I am eating junk food
+```
+
+一开始想复杂了，一个冲刷器不停冲刷任务队列，一个正常任务队列一个延时队列，看了别人答案的确是链路比较好,有点像 `generator` 的实现
+
+```js
+function LazyMan(str) {
+    let queue = [];
+
+    function next() {
+        currentTask = queue.shift();
+        currentTask && currentTask();
+    }
+
+    Promise.resolve().then(next);
+    str && console.log(`hi Im ${str}`);
+    return {
+        sleep(num) {
+            queue.push(function() {
+                setTimeout(next, num*1000);
+            });
+            return this;
+        },
+        eat(str) {
+            queue.push((function(str) {
+                return function() {
+                    console.log(`eat ${str}`);
+                    next();
+                }
+            })(str));
+            return this;
+        },
+        sleepFirst(num) {
+            queue.unshift(function() {
+                setTimeout(next, num*1000);
+            });
+            return this;
+        }
+    }
+}
+```
+
+### 用 setTimeOut 实现 setInterVal
+
+管理了id 实现了清理
+
+```js
+function setMyInterval(cb, dur, extar, timer = {}) {
+    timer.id = setTimeout(() => {
+        cb(extar);
+        clearTimeout(timer.id)
+        setMyInterval(cb, dur, extar, timer)
+    }, dur, extar);
+    return timer;
+}
+function clearMyInterval(timer) {
+    clearTimeout(timer.id)
+}
+```
+
+### 深拷贝，考虑 symbol 和 引用
+
+基本验证了下可以，WeakSet 存对象防止多次引用，多次引用返回引用的对象 不拷贝。
+
+```js
+function deepCopy(target, cache = new WeakSet()) {
+    let result;
+    if (target instanceof Object) {
+        if (cache.has(target)) return target;
+        cache.add(target);
+        if (Array.isArray(target)) {
+            result = [];
+            for (let i = 0;i < target.length; i++) {
+                result[i] = deepCopy(target[i], cache);
+            }
+        } else {
+            result = {};
+            Reflect.ownKeys(target).forEach(key => void (result[key] = deepCopy(target[key], cache)))
+        }
+    } else {
+        result = target;
+    }
+
+    return result;
+}
+```
+
 ## 浏览器
+
+### webview 通讯机制
+
+* 拦截URL SCHEME
+
+实际上 webview 和浏览器一样会请求 url 而 Native 可以对请求进行拦截，获取 url 即参数数据，对特定 url 进行操作。
+
+通常用 iframe.src 来发送而不是 location.href。
+
+* api 注入
+
+通过 webview 提供的接口直接对 window 注入对象或者方法，让js 调用时直接调用 Native 代码逻辑
+
+api 注入更好，请求需要耗时，url 长度也有一定的限制
+
+* Native 调用 JavaScript
+
+通过接口可以直接执行 js 代码（类似 eval）方法对象需在 window 上实现
 
 ### http2
 
@@ -478,6 +606,11 @@ Reflect.ownKeys(test); // ['a', 'b', Symbol(c), Symbol(d)]
 
 ## Vue
 
+### v-if & v-show
+
+* `v-if` diff 时候会删除、增加节点
+* `v-show` 会设置 `display` 属性
+
 ### nextTick
 
 其实就是微任务 `microtask`。之所以是微任务也是经过各种情况累计出来的。
@@ -679,6 +812,56 @@ export const connected: Connected = connect(new EffectModule());
 * 获取方法的参数类型 `Parameters<Function>`
 * 获取方法的返回类型 `ReturnType<Function>`
 * 从 `AA<BB>` 类型中拿到 `BB` 类型，主要是 `infer` 语句： `AA<BB> extends AA<infer T> ? T : other` 其中 `T` 就是拿到的 `BB` 类型。
+
+## 工程化
+
+### 异常监控
+
+#### 错误捕获
+
+1. `try catch`: 用一个大的 `try catch` 来捕获所有错误
+
+2. `onerror`： 事件 监听全局的 `onerror` 事件，重写 `window.onerror` 或者 `window.addEventListener('error')` 都行 (注意冒泡和捕获)
+  
+3. `object.onerror`：资源加载错误监控，比如 `image`
+
+```js
+let img = new Image()
+img.onerror = funtion() {...}
+img.src = 'haha'
+```
+
+4. `performance`：借助 `performance` 可以找到那些资源没加载。`performance.getEntriesByType('resource')` 会获得资源加载的条目 (initiatorType: img|script|css 等等)，这些都是成功的，如果知道总共有哪些资源需要加载，对比下就找到没加载成功的。如 `document.getElementsByTagName('link')` 和 `initiatorType = link` 的条目进行对比。
+
+5. `onunhandledrejection`：监听所有未处理的 Promise reject handler。
+
+```js
+window.onunhandledrejection = function(e) {
+  console.log('window', e.reason);
+}
+
+Promise.reject(123).then();
+// window 123
+Promise.reject(123).then(null, reason => void console.log('promise', reason));
+// promise 123
+```
+
+#### 上传
+
+* 正常 AJAX 上传
+* image 上传
+
+image 方法比较好，因为跨域友好无阻塞，性能好，无需关心返回。后端返回个 204 连返回都不需要。
+
+### 性能监控
+
+主要就是用 `Performance`
+
+`Performance.getEntries()` 可以导出所有性能相关的条目，其中有内存相关`memory`、来源相关`navigation`、事件相关`timing`。
+
+`Performance,mark()` 可以打标记，手动添加条目
+
+`Performance.getEntriesByName()`、`Performance.getEntriesByType()` 可以筛选条目等等
 
 [Array exotic object]:https://www.ecma-international.org/ecma-262/6.0/#sec-array-exotic-objects
 [time_slicing]:https://zhuanlan.zhihu.com/p/88996118
