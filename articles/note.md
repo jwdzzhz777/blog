@@ -46,6 +46,118 @@ Object.defineProperty(window, 'b', {
 
 ## 编程
 
+### 写个程序把 entry 转换成如下对象
+
+```js
+var entry = {
+  'a.b.c.dd': 'abcdd',
+  'a.d.xx': 'adxx',
+  'a.e': 'ae'
+}
+
+// 要求转换成如下对象
+var output = {
+  a: {
+   b: {
+     c: {
+       dd: 'abcdd'
+     }
+   },
+   d: {
+     xx: 'adxx'
+   },
+   e: 'ae'
+  }
+}
+```
+
+```js
+function process(entry) {
+    let result = {};
+    Object.keys(entry).forEach((key) => {
+        key.split('.').reduce((a, b, index, {length}) => {
+            if (index === length - 1) {
+                a[b] = entry[key]
+            } else if (!(b in a)) {
+                a[b] = {}
+            }
+            return a[b];
+        }, result);
+    });
+    return result;
+}
+```
+
+### 实现 destructuringArray 方法，达到如下效果
+
+`destructuringArray([1,[2,4],3], "[a,[b],c]")`
+`{a: 1, b: 2, c: 3}`
+
+```js
+function destructuringArray(value, key) {
+    let code = `
+        let result = {};
+        with(new Proxy(result, {
+            has() {
+                return true
+            }
+        })) {
+            ${key} = ${JSON.stringify(value)};
+        }
+        return result;
+    `;
+    let fn = new Function(code);
+    return fn();
+}
+```
+
+实现是实现了。。。会被打死吧
+
+### 实现一个 normalize 函数，能将输入的特定的字符串转化为特定的结构化数据
+
+字符串仅由小写字母和 [] 组成，且字符串不会包含多余的空格。
+示例一: 'abc' --> {value: 'abc'}
+示例二：'[abc[bcd[def]]]' --> {value: 'abc', children: {value: 'bcd', children: {value: 'def'}}}
+
+```js
+function normalize(str) {
+  let current, result;
+  while (current = str.match(/\[([a-z]+)\]/)) {
+    let [res, value] = current;
+    result = result ? { value, children: result } : { value };
+    str = str.replace(res, '');
+  }
+  if (!result) result = {value: str};
+  return result;
+}
+```
+
+### 实现 call、apply、bind
+
+注意 bind 带有柯里化的性质
+
+```js
+function call(fn, target, ...args) {
+  const name = Symbol(fn.name);
+  target[name] = fn;
+  return target[name](...args);
+}
+
+function apply(fn, target, args) {
+  const name = Symbol(fn.name);
+  target[name] = fn;
+  return target[name](...args);
+}
+
+function bind(fn, target, ...preArgs) {
+  const name = Symbol(fn.name);
+  target[name] = fn;
+  return function(...args) {
+    return target[name](...[...preArgs, ...args])
+  }
+}
+```
+
 ### 二叉树的最大深度
 
 递归，执行一次加个1
@@ -201,6 +313,20 @@ function deepCopy(target, cache = new WeakSet()) {
 
 ## 浏览器
 
+### http 状态码
+
+* 200: 成功、强缓存未过期、弱缓存，service work
+* 204: no content 请求成功但没有返回任何内容，适用于埋点
+* 301: 永久重定向
+* 302: 临时重定向
+* 304: 强缓存过期，url请求，服务器判断未过期可以继续使用
+* 400: 错误
+* 401: 需要身份验证
+* 403: 服务器拒绝
+* 404: not found
+* 500: 服务器内部错误
+* 503: 服务不可用
+
 ### webview 通讯机制
 
 * 拦截URL SCHEME
@@ -236,6 +362,57 @@ api 注入更好，请求需要耗时，url 长度也有一定的限制
 `prefetch` 为预先加载之后**可能**会用到的资源，浏览器会在空闲时间加载这些资源。
 
 `preload` 为预先加载之后**一定**会用到的资源，标记了 `preload` 的资源会在页面生命周期的早期加载，再进行浏览器的主渲染，并不会阻塞进程。
+
+## 函数式编程
+
+### 柯里化
+
+```js
+function curry(fn, arr = []) {
+  let { length } = fn;
+  return arr.length === fn.length ?
+    fn(...arr) :
+    function(...args) {
+      return curry(fn, [...arr, ...args])
+    }
+}
+```
+
+### compose
+
+组合，从后到前 `compose(f, g, h) = f(g(h()))`
+
+```js
+function compose(...args) {
+  let res, current;
+  return function(arg) {
+    let fns = args.slice();
+    res = arg;
+    while (current = fns.pop()) {
+      res = current(res);
+    }
+    return res;
+  }
+}
+```
+
+### pipe
+
+管道，从前往后 `pipe(f,g,h) = h(g(f()))`
+
+```js
+function pipe(...args) {
+  let res, current;
+  return function(arg) {
+    let fns = args.slice();
+    res = arg;
+    while (current = fns.shift()) {
+      res = current(res);
+    }
+    return res;
+  }
+}
+```
 
 ## javascript
 
@@ -605,6 +782,72 @@ Reflect.ownKeys(test); // ['a', 'b', Symbol(c), Symbol(d)]
 见 github [MyPromise][MyPromise]
 
 ## Vue
+
+### 在 Vue 中，子组件为何不可以修改父组件传递的 Prop
+
+如果修改了，Vue 是如何监控到属性的修改并给出警告的。
+
+原因是单向数据流，只能从父往子流动，因为父只有一个，容易追溯来源，而子可以有很多个，如果都能修改则很难追溯来源。
+
+实际上 vue 是这样工作的：
+
+更新视图过程中遇到组件时会处理 props, 过程类似于这样：
+
+```js
+this.$props = {};
+
+for (let key in propsOption) {
+  if (...) {
+    this.$props[key] = vnode.props[key]
+    Object.defineProperty(this.$props, key, {
+      get() {...},
+      set() {...}
+    })
+  }
+}
+
+```
+
+vnode.props 是从父组件中取的值，有两种情况，非引用类型和引用类型, 类似这样
+
+```js
+let data = {
+  a: '123'
+  b: {
+    c: '321'
+  }
+}
+
+let props = {};
+
+props.a = data.a;
+props.b = data.b;
+```
+
+之后无论哪种情况你去修改 `props[key]` 都不会影响 data，这和 vue 无关，js 引用的性质
+
+```js
+props.a = '321'
+props.b = {
+  d: '123'
+}
+// data 不可能变
+```
+
+而如果改了引用对象，父组件的数据也是会跟着变得
+
+```js
+props.b.c = '123'
+console.log(data.b.c) // 123 
+```
+
+这个毋庸置疑，实际上 vue 也是这样的，他并没有做什么限制所以，vue 可以子组件可以修改父组件的数据吗？答案是可以。
+
+当然 vue 也不希望你这么做。在 `$props` 的 `set` 中 vue 如果判断出你手动修改了 `$props` 就会发出提醒，vue 是如何判断的呢？
+
+首先 `$props` 这个对象他只有在 `render => update` 的过程中才可能被创建/修改，所以在这一过程 vue 有一个全局状态 `isUpdatingChildComponent` 来标记，在 `$props` 的 `set` 中如果发现 `isUpdatingChildComponent === false` 就意味着 `$props` 被人为修改了，vue 就会发出提示，但是并不阻止你这么做。
+
+有趣的是因为劫持的是 `$props` 的 `set` 只有上述 `props[key]` 的情况才会发出提示，而你真正修改父组件的情况（也就是上述修改引用的情况）实际上根本无法判断，也没发发出提示。
 
 ### v-if & v-show
 
