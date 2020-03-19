@@ -979,7 +979,7 @@ a!.b();
 
 也就是 `!.` 并不会转换多余的代码，也不会改变结果，如果此时 `a.b` 不存在（就像上述代码）就会报错。详情见[官方文档][non_null_operator]。
 
-`?.` 操作符是 TypeScript 3.7 引入的 [Optional Chaining][optional_chaining] 其作用是当编写代码时遇到 `null` 或 `undefiend` 时立即停止运行表达式:
+`?.` 操作符是 TypeScript 3.7 / ES10 引入的 [Optional Chaining][optional_chaining] 其作用是当编写代码时遇到 `null` 或 `undefiend` 时立即停止运行表达式:
 
 ```ts
 let x = foo?.bar.baz();
