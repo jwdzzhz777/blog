@@ -313,6 +313,18 @@ function deepCopy(target, cache = new WeakSet()) {
 
 ## 浏览器
 
+### 即时通讯技术
+
+#### websocket
+
+不同于 http 他是一个新的应用层协议，但是其借用了 http 协议来完成一部分握手，兼容了现有浏览器的握手规范
+
+#### EventSource
+
+* `EventSource` 基于 http 协议，`EventSource` 实例将会打开与 http 服务器的长久链接，服务器可以发送文本数据，直到 `EventSource` 关闭
+* 打开链接后来自服务端的笑嘻嘻将以事件的形式通知
+* 不同于 `Websocket`，它发送的事件是单向的，只能通过服务端到客户端
+
 ### http 状态码
 
 * 200: 成功、强缓存未过期、弱缓存，service work
@@ -1105,6 +1117,16 @@ image 方法比较好，因为跨域友好无阻塞，性能好，无需关心�
 `Performance,mark()` 可以打标记，手动添加条目
 
 `Performance.getEntriesByName()`、`Performance.getEntriesByType()` 可以筛选条目等等
+
+### webpack 热更新原理
+
+`HotModuleReplacementPlugin` 开启热更新，node 端引入 `webpack-hot-middleware/middleware.js` 来支持
+
+* 浏览器初始化 `EventSource`, 发起 http 请求与服务器建立联系（长链接）
+* webpack 监听到文件的变化，重新编译文件
+* 编译完成发送 `EventSource` 消息，提供 `hot-update.json`
+* 客户端收到事件消息，将 `hot-update.js` 链接插入dom （<script>）
+* 执行 `hot-update.js` 完成刷新。
 
 [Array exotic object]:https://www.ecma-international.org/ecma-262/6.0/#sec-array-exotic-objects
 [time_slicing]:https://zhuanlan.zhihu.com/p/88996118
