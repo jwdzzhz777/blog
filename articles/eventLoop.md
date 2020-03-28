@@ -1,6 +1,7 @@
 # Event Loop
 
 ## 什么是 event loop
+
 event loop是一个规范，具体看[这里](event-loop-spec)，每个浏览器实现不一样。
 
 *event loop* 有一个或多个*task queues*，一个 *task queue* 是一组 *tasks*
@@ -12,7 +13,6 @@ event loop是一个规范，具体看[这里](event-loop-spec)，每个浏览器
 ![eventloop][eventloop]
 
 上面是规范的原文了内容还有有很多，*microtask* 就是我们所说的**微任务**，规范中并未提及 `macrotask queue` ，根据[这个][issue]提到的 *task queue* 就是我们所说的 `macrotask queue` ，一个 *task* 就是一个 `macrotask` ，这个之后讨论。
-
 
 ## tasks & microtask
 
@@ -141,8 +141,191 @@ while (/** event loop exist */) {
 
 [tasks-microtasks-queues-and-schedules][tasks-microtasks-queues-and-schedules]
 
+***
 
-[event-loop-spec]:https://html.spec.whatwg.org/multipage/webappapis.html#event-loop
+> 更新一下
+
+我们再深入一下另外两种情况
+
+## requestAnimationFrame
+
+首先 `requestAnimationFrame` 是什么，官方的描述是：
+
+> 该方法告诉浏览器您希望执行动画，并请求浏览器在下一次重绘之前调用指定的函数。
+
+值得注意的是该操作是**一次性的**
+也就是说每调用一次 `window.requestAnimationFrame(callBack)` 浏览器只会在下一次重绘之前调用 `callBack` 而不是像注册一个事件一样长久保持。所以正常的使用方法是这样的：
+
+```js
+let anim = document.querySelector('#anim');
+
+let time = 0;
+function step() {
+    anim.style.width = `${anim.clientWidth + 1}px`;
+
+    if (time < 60) {
+        time++;
+        window.requestAnimationFrame(step)
+    }
+}
+
+step();
+```
+
+这样就会有一个长达 1s 的动画了（正常情况）。
+
+然而为什么是 1s ？
+且他究竟是在哪一步执行，是插队到当前的队列中吗？ 我们接着来看看：
+
+```html
+<style>
+    #anim {
+        width: 100px;
+        height: 100px;
+        background: red;
+    }
+</style>
+<body>
+    <div id="anim"></div>
+    <button onclick="clickH()" onmouseup="step()">321</button>
+</body>
+<script>
+    let anim = document.querySelector('#anim');
+    let time = 0;
+    function step() {
+        anim.style.width = `${anim.clientWidth + 1}px`;
+        if (time < 60) {
+            time++;
+            window.requestAnimationFrame(step)
+        }
+    }
+    function clickH() {
+        console.log(anim.clientWidth);
+    }
+</script>
+```
+
+我们通过 `onmouseup` 来触发一个事件，并开启一个动画，老样子我们通过 chrome 的 performance 来看看具体的情况：
+
+![img-requestAnimationFrame]
+
+我们截取了开始的一小段，可以看到真正执行 `requestAnimationFrame` 的 callBack 的时机是 绘制(Paint)之前，并且就被’解雇‘了 (`Animation Frame Fired`)。OK， **结论**已经出来了，不过我们继续深入下这个渲染：
+
+我们来复习一下浏览器渲染的步骤：js(dom 操作等) => Style(计算样式) => Layout(布局) => Paint(绘制) => Composite(渲染层合并)
+
+实际上这并不是一个连续的流程，我们仔细看看 `mouseup => setp` 下面的两个紫色小块，他们分别是 `Style` 和 `Layout`，也就是说每一次 dom 操作都会同步的执行 `Style` 和 `Layout` 的过程，这并不是插队，所有渲染的过程都在渲染线程完成，我们知道渲染线程和js线程是互斥的，也就是说渲染线程工作时js线程是挂起的，所以并不是在上面说的冲刷 `microtask` 的后面的渲染过程中执行，我们可以加一个微任务简单测试一下
+
+![style&layout]
+
+可以看到很明显的的顺序。这也是为什么设置了 `anim.style.width` 之后能马上拿到 `anim.clientWidth` 的原因。(有意思的是 height 不会触发 Layout 大家可以试一试)
+
+那么什么时候会触发 `Paint` 呢，之前我们讲到每次冲刷 `microtask` 之后都有可能发生渲染，这个可能是怎么判断的呢，我们看到文档中流程模型的 [step11][update-rendering]。浏览器会判断当前是否有渲染机会（Rendering opportunities）以及是否有渲染的必要（Unnecessary rendering）。渲染的必要很好理解，你没有做任何操作自然不需要重绘。渲染机会和浏览器刷新率有关，1s 内 `Paint` 的次数不会超过刷新率，所以我们上边看到真正 `Paint` 的时机是在 `mouseup` 和 `click` 之后的，因为整个执行的过程才 14ms 还不到一帧的时间(60hz)。现在我们给 `mouseup` 事件多加一些操作让其比较耗时：
+
+```html
+<style>
+    #anim {
+        width: 100px;
+        height: 100px;
+        background: red;
+    }
+</style>
+<body>
+    <div id="anim"></div>
+    <button onclick="clickH()" onmouseup="mouseupH()">321</button>
+</body>
+<script>
+    let anim = document.querySelector('#anim');
+    let time = 0;
+    function step() {
+        anim.style.width = `${anim.clientWidth + 1}px`;
+        if (time < 60) {
+            time++;
+            window.requestAnimationFrame(step)
+        }
+    }
+    function mouseupH() {
+        step();
+        for (let i=0;i<1000;i++) {
+            console.log(1);
+        }
+    }
+    function clickH() {
+        console.log(anim.clientWidth);
+    }
+</script>
+```
+
+图就不放了大家可以试一试，结果是和之前一样，还是没有中间渲染...（mouseup 和 click 之间） 这又是为什么呢，不符合规范啊。
+
+我们来看看 step.11-5 的描述，在这一步会删除出于某种原因最好跳过更新渲染的所有 Document 对象。下面有这么一段提示
+
+> note: This step enables the user agent to prevent the steps below from running for other reasons, for example, to ensure certain tasks are executed immediately after each other, with only microtask checkpoints interleaved (and without, e.g., animation frame callbacks interleaved). Concretely, a user agent might wish to coalesce timer callbacks together, with no intermediate rendering updates.
+
+微任务交错可以理解，冲刷微任务时肯定不希望一直触发渲染，可是并没有举例其他情况，不过我们只要知道，每一次 task => microtask queue 之后都会触发 `Paint` 只不过大多情况被’跳过‘了，所以真正 `Paint` 的时机就到了最后一次任务处理，也就是之后没有可执行的 task 时，而 `requestAnimationFrame` 的 callBack 始终是在 `Paint` 之前的。
+
+## requestIdleCallback
+
+接着我们来看看 `requestIdleCallback` 官方给的描述是：
+
+> 该方法将在浏览器的空闲时段内调用回调函数队列。这使开发者能够在主事件循环上执行后台和低优先级工作，而不会影响延迟关键事件，如动画和输入响应。函数一般会按先进先调用的顺序执行，然而，如果回调函数指定了执行超时时间timeout，则有可能为了在超时前执行函数而打乱执行顺序
+
+简单的说其处理的回调将在空闲时间执行。这是他的用法：
+
+```js
+window.requestIdleCallback(callBack, { timeout: 1000 });
+```
+
+实际上他和 `setTimeout` 差不多，`setTimeout` 是延时一段时间后把 callBack 推到任务队列，而 `requestIdleCallback` 是延时一段时间后把 callBack 推到 与空闲任务相关的源（Source）的队列中。这里是详细的[定义][requestIdleCallback]
+
+现在我们把他加到例子中去：
+
+```html
+<body>
+    <div id="anim"></div>
+    <button onclick="clickH()" onmouseup="mouseupH()">321</button>
+</body>
+<script>
+    let anim = document.querySelector('#anim');
+    let time = 0;
+    function step() {
+        anim.style.width = `${anim.clientWidth + 1}px`;
+        if (time < 60) {
+            time++;
+            window.requestAnimationFrame(step)
+        }
+    }
+    function relax() {
+        if (time < 60) {
+            time2++;
+            window.requestIdleCallback(relax)
+        }
+    }
+    function mouseupH() {
+        step();
+        relax();
+    }
+    function clickH() {
+        console.log(anim.clientWidth);
+    }
+</script>
+```
+
+看看结果：
+
+![img-requestIdleCallback]
+
+可以看到回调的执行时间在每次渲染之后，我们来看看 [流程模型][Processing model]的 step.12，满足下列条件时会执行 [REQUESTIDLECALLBACK]:
+
+1. 当前是一个 window event loop
+2. 事件循环中没有 task 且没有文档出于活动状态
+3. 微任务队列也为空
+4. hasARenderingOpportunity 标志位为false （每次微任务之后的渲染过程才会为 true）
+
+渲染过程在 step.11，空闲任务的执行在 step.12 这也就是为什么我们看到 `requestIdleCallback` 的 callBack 总是在 渲染之后执行。
+
+最后，通过这两个东西，我也算是把之前模棱两可的渲染这一步算是补完了，不过 Event loop 的内容其实很多，后续可能还会更新。
+
+[event-loop-spec]:https://html.spec.whatwg.org/multipage/webappapis.html#event-loops
 [issue]:https://stackoverflow.com/questions/25915634/difference-between-microtask-and-macrotask-within-an-event-loop-context
 [task]:https://html.spec.whatwg.org/multipage/webappapis.html#concept-task
 [Processing model]:https://html.spec.whatwg.org/multipage/webappapis.html#event-loop-processing-model
@@ -153,3 +336,8 @@ while (/** event loop exist */) {
 [newTask]:https://github.com/jwdzzhz777/blog/blob/master/assets/event_loop/newTask.jpg?raw=true
 [processing]:https://github.com/jwdzzhz777/blog/blob/master/assets/event_loop/processing.jpg?raw=true
 [click]:https://github.com/jwdzzhz777/blog/blob/master/assets/event_loop/click.jpg?raw=true
+[update-rendering]:https://html.spec.whatwg.org/multipage/webappapis.html#update-the-rendering
+[img-requestAnimationFrame]:https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/event_loop/requestAnimaFrame.jpg
+[style&layout]:https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/event_loop/style%26layout.jpg
+[requestIdleCallback]:https://w3c.github.io/requestidlecallback/#the-requestidlecallback-method
+[img-requestIdleCallback]:https://raw.githubusercontent.com/jwdzzhz777/blog/master/assets/event_loop/idleCallback.jpg
