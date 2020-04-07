@@ -692,6 +692,19 @@ function flatten(arr, cache) {
 }
 ```
 
+输出原数组：
+
+```js
+function flatten(arr) {
+  arr.forEach((item, index) => {
+    if (Array.isArray(item)) {
+      arr.splice(index, 1, ...flatten(item));
+    }
+  })
+  return arr;
+}
+```
+
 内置函数实现：
 
 ```js
